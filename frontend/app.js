@@ -1,90 +1,22 @@
-/* ============================================================
-   SportsIQ — Cricket Intelligence Frontend
-   ============================================================ */
+const API_BASE = "https://sportsiq-backend-i3sr.onrender.com/api";
 
-const API_BASE =
-    "https://sportsiq-backend-i3sr.onrender.com/api";
+let charts = {};
+let currentPlayer = null;
 
 
-/* ============================================================
+/* =========================================================
    BASIC HELPERS
-   ============================================================ */
+========================================================= */
 
-const $ = (id) => document.getElementById(id);
-
-function safe(value, fallback = "—") {
-    if (
-        value === null ||
-        value === undefined ||
-        value === "" ||
-        (typeof value === "number" && !Number.isFinite(value))
-    ) {
-        return fallback;
-    }
-
-    return value;
+function $(id) {
+    return document.getElementById(id);
 }
 
-function number(value, digits = 2) {
-    if (
-        value === null ||
-        value === undefined ||
-        value === ""
-    ) {
-        return "—";
-    }
-
-    const n = Number(value);
-
-    if (!Number.isFinite(n)) {
-        return "—";
-    }
-
-    return n.toFixed(digits);
-}
-
-function integer(value) {
-    if (
-        value === null ||
-        value === undefined ||
-        value === ""
-    ) {
-        return "—";
-    }
-
-    const n = Number(value);
-
-    if (!Number.isFinite(n)) {
-        return "—";
-    }
-
-    return Math.round(n).toLocaleString();
-}
-
-function percent(value) {
-    if (
-        value === null ||
-        value === undefined ||
-        value === ""
-    ) {
-        return "—";
-    }
-
-    const n = Number(value);
-
-    if (!Number.isFinite(n)) {
-        return "—";
-    }
-
-    return `${n.toFixed(2)}%`;
-}
-
-function encode(value) {
-    return encodeURIComponent(String(value ?? ""));
-}
 
 function escapeHTML(value) {
-    return String(value ?? "")
+    if (value === null || value === undefined) return "";
+
+    return String(value)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -92,98 +24,55 @@ function escapeHTML(value) {
         .replace(/'/g, "&#039;");
 }
 
-function setText(ids, value) {
-    ids.forEach(id => {
-        const element = $(id);
 
-        if (element) {
-            element.textContent = safe(value);
-        }
-    });
-}
+function setText(id, value, fallback = "—") {
+    const element = $(id);
 
-function setHTML(ids, html) {
-    ids.forEach(id => {
-        const element = $(id);
+    if (!element) {
+        console.warn(`Element not found: #${id}`);
+        return;
+    }
 
-        if (element) {
-            element.innerHTML = html;
-        }
-    });
-}
-
-function showError(ids, message) {
-    ids.forEach(id => {
-        const element = $(id);
-
-        if (element) {
-            element.textContent =
-                message || "Unable to load data.";
-        }
-    });
+    if (value === null || value === undefined || value === "") {
+        element.textContent = fallback;
+    } else {
+        element.textContent = value;
+    }
 }
 
 
-/* ============================================================
-   API FETCH
-   ============================================================ */
+/* =========================================================
+   API
+========================================================= */
 
 async function apiFetch(endpoint, options = {}) {
 
-    const url =
-        `${API_BASE}${endpoint}`;
+    const url = `${API_BASE}${endpoint}`;
 
-    console.log(
-        "SportsIQ API REQUEST:",
-        options.method || "GET",
-        url
-    );
-
-    const controller =
-        new AbortController();
-
-    const timeout =
-        setTimeout(() => {
-            controller.abort();
-        }, options.timeout || 90000);
+    console.log("SportsIQ API REQUEST:", url);
 
     try {
 
-        const response =
-            await fetch(url, {
-                method:
-                    options.method || "GET",
-
-                body:
-                    options.body,
-
-                signal:
-                    controller.signal,
-
-                headers: {
-                    "Content-Type":
-                        "application/json",
-
-                    ...(options.headers || {})
-                }
-            });
+        const response = await fetch(url, {
+            ...options,
+            headers: {
+                "Content-Type": "application/json",
+                ...(options.headers || {})
+            }
+        });
 
         console.log(
             "SportsIQ API RESPONSE:",
-            response.status,
-            url
+            endpoint,
+            response.status
         );
 
-        const text =
-            await response.text();
+        const text = await response.text();
 
-        let data = {};
+        let data;
 
         try {
-            data =
-                text
-                    ? JSON.parse(text)
-                    : {};
+            data = text ? JSON.parse(text) : {};
         } catch {
             data = {
                 raw: text
@@ -194,15 +83,14 @@ async function apiFetch(endpoint, options = {}) {
 
             console.error(
                 "SportsIQ API ERROR:",
-                response.status,
+                endpoint,
                 data
             );
 
             throw new Error(
-                data?.detail ||
-                data?.message ||
-                data?.error ||
-                `Server returned ${response.status}`
+                data.detail ||
+                data.message ||
+                `API request failed (${response.status})`
             );
         }
 
@@ -212,1677 +100,1435 @@ async function apiFetch(endpoint, options = {}) {
 
         console.error(
             "SportsIQ FETCH FAILED:",
+            endpoint,
             error
         );
 
-        if (
-            error.name === "AbortError"
-        ) {
-            throw new Error(
-                "Request timed out. The Render server may be waking up."
-            );
-        }
-
         throw error;
-
-    } finally {
-
-        clearTimeout(timeout);
-
     }
 }
 
 
-/* ============================================================
-   INITIALIZATION
-   ============================================================ */
-
-document.addEventListener(
-    "DOMContentLoaded",
-    async () => {
-
-        console.log(
-            "SportsIQ frontend loaded."
-        );
-
-        console.log(
-            "SportsIQ API:",
-            API_BASE
-        );
-
-        setupNavigation();
-        setupPlayerControls();
-        setupAI();
-        setupModal();
-        setupRefresh();
-        setupTeamControls();
-        setupVenueControls();
-        setupMatchup();
-
-        showSection(
-            "dashboard-section"
-        );
-
-        /*
-         * Load independent dashboard data.
-         * Promise.allSettled prevents one failed endpoint
-         * from stopping the entire frontend.
-         */
-
-        await Promise.allSettled([
-            loadHealth(),
-            loadOverview(),
-            loadPlayers(),
-            loadMatches(),
-            loadTeams(),
-            loadVenues()
-        ]);
-
-    }
-);
-
-
-/* ============================================================
+/* =========================================================
    NAVIGATION
-   ============================================================ */
+========================================================= */
 
 function setupNavigation() {
 
-    const links =
-        document.querySelectorAll(
-            "[data-section], .nav-link, .sidebar-link"
-        );
+    const buttons = document.querySelectorAll(
+        ".nav-item[data-section], .feature-card[data-section]"
+    );
 
-    links.forEach(link => {
+    console.log(
+        "SportsIQ navigation buttons:",
+        buttons.length
+    );
 
-        link.addEventListener(
-            "click",
-            event => {
+    buttons.forEach(button => {
 
-                const target =
-                    link.dataset.section ||
-                    link.getAttribute(
-                        "data-target"
-                    ) ||
-                    link.getAttribute(
-                        "href"
-                    );
+        button.addEventListener("click", () => {
 
-                if (!target) {
-                    return;
-                }
+            const section = button.dataset.section;
 
-                if (
-                    target.startsWith("#")
-                ) {
-
-                    event.preventDefault();
-
-                    showSection(
-                        target.substring(1)
-                    );
-
-                }
-
-            }
-        );
-
-    });
-
-}
-
-function showSection(sectionId) {
-
-    const sections =
-        document.querySelectorAll(
-            "section[id], .page-section"
-        );
-
-    sections.forEach(section => {
-
-        if (
-            section.id === sectionId
-        ) {
-
-            section.style.display = "";
-
-        } else {
-
-            section.style.display = "none";
-
-        }
-
-    });
-
-    const links =
-        document.querySelectorAll(
-            "[data-section], .nav-link, .sidebar-link"
-        );
-
-    links.forEach(link => {
-
-        const target =
-            link.dataset.section ||
-            link.getAttribute(
-                "data-target"
-            ) ||
-            link.getAttribute(
-                "href"
+            console.log(
+                "SportsIQ navigation:",
+                section
             );
 
-        link.classList.toggle(
-            "active",
-            target === sectionId ||
-            target === `#${sectionId}`
-        );
-
+            showSection(section);
+        });
     });
-
 }
 
 
-/* ============================================================
+function showSection(sectionName) {
+
+    console.log(
+        "SportsIQ SHOW SECTION:",
+        sectionName
+    );
+
+    const sections = document.querySelectorAll(
+        ".page-section"
+    );
+
+    sections.forEach(section => {
+        section.classList.remove("active");
+        section.style.display = "none";
+    });
+
+
+    const target = $(`${sectionName}-section`);
+
+    if (!target) {
+
+        console.error(
+            `Section not found: ${sectionName}-section`
+        );
+
+        return;
+    }
+
+
+    target.classList.add("active");
+    target.style.display = "";
+
+
+    document
+        .querySelectorAll(".nav-item[data-section]")
+        .forEach(button => {
+
+            button.classList.toggle(
+                "active",
+                button.dataset.section === sectionName
+            );
+        });
+
+
+    const titles = {
+        dashboard: "Dashboard",
+        players: "Player Intelligence",
+        matches: "Match Intelligence",
+        teams: "Teams",
+        venues: "Venues",
+        ai: "AI Analyst"
+    };
+
+
+    setText(
+        "page-title",
+        titles[sectionName] || "SportsIQ"
+    );
+
+
+    /* Load section data */
+
+    if (sectionName === "players") {
+        loadPlayers();
+    }
+
+    if (sectionName === "matches") {
+        loadMatches();
+        loadSeasons();
+    }
+
+    if (sectionName === "teams") {
+        loadTeams();
+    }
+
+    if (sectionName === "venues") {
+        loadVenues();
+    }
+}
+
+
+/* =========================================================
    HEALTH
-   ============================================================ */
+========================================================= */
 
 async function loadHealth() {
 
     try {
 
-        const data =
-            await apiFetch(
-                "/health"
-            );
+        const data = await apiFetch("/health");
 
         console.log(
-            "Health:",
+            "SportsIQ HEALTH:",
             data
-        );
-
-        const status =
-            data?.status ||
-            data?.message ||
-            "Online";
-
-        setText(
-            [
-                "system-status",
-                "engine-status",
-                "health-status",
-                "status-text"
-            ],
-            status
         );
 
     } catch (error) {
 
         console.error(
-            "Health error:",
+            "Health check failed:",
             error
         );
-
-        setText(
-            [
-                "system-status",
-                "engine-status",
-                "health-status",
-                "status-text"
-            ],
-            "Offline"
-        );
-
     }
-
 }
 
 
-/* ============================================================
+/* =========================================================
    OVERVIEW
-   ============================================================ */
+========================================================= */
 
 async function loadOverview() {
 
     try {
 
-        const data =
-            await apiFetch(
-                "/overview"
-            );
+        const data = await apiFetch("/overview");
 
         console.log(
-            "Overview:",
+            "SportsIQ OVERVIEW DATA:",
             data
         );
 
+
+        /*
+         * Support both:
+         *
+         * {
+         *   matches: ...,
+         *   deliveries: ...,
+         *   players: ...,
+         *   teams: ...
+         * }
+         *
+         * and:
+         *
+         * {
+         *   overview: {
+         *      matches: ...
+         *   }
+         * }
+         */
+
         const overview =
-            data?.overview ||
-            data?.data ||
+            data.overview ||
+            data.data ||
             data;
 
-        setText(
-            [
-                "matches-count",
-                "total-matches",
-                "matches"
-            ],
-            integer(
-                overview?.matches ??
-                overview?.total_matches
-            )
-        );
 
         setText(
-            [
-                "deliveries-count",
-                "total-deliveries",
-                "deliveries"
-            ],
-            integer(
-                overview?.deliveries ??
-                overview?.total_deliveries
-            )
+            "kpi-matches",
+            overview.matches ??
+            overview.total_matches ??
+            overview.match_count
         );
 
-        setText(
-            [
-                "players-count",
-                "total-players",
-                "players"
-            ],
-            integer(
-                overview?.players ??
-                overview?.total_players
-            )
-        );
 
         setText(
-            [
-                "teams-count",
-                "total-teams",
-                "teams"
-            ],
-            integer(
-                overview?.teams ??
-                overview?.total_teams
-            )
+            "kpi-deliveries",
+            overview.deliveries ??
+            overview.total_deliveries ??
+            overview.delivery_count
         );
 
-        setText(
-            [
-                "venues-count",
-                "total-venues",
-                "venues"
-            ],
-            integer(
-                overview?.venues ??
-                overview?.total_venues
-            )
-        );
 
         setText(
-            [
-                "seasons-count",
-                "total-seasons",
-                "seasons"
-            ],
-            integer(
-                overview?.seasons ??
-                overview?.total_seasons
-            )
+            "kpi-players",
+            overview.players ??
+            overview.total_players ??
+            overview.player_count
+        );
+
+
+        setText(
+            "kpi-teams",
+            overview.teams ??
+            overview.total_teams ??
+            overview.team_count
         );
 
     } catch (error) {
 
         console.error(
-            "Overview error:",
+            "Overview loading failed:",
             error
         );
 
-        showError(
-            [
-                "dashboard-error",
-                "overview-error"
-            ],
-            error.message
-        );
-
+        setText("kpi-matches", "—");
+        setText("kpi-deliveries", "—");
+        setText("kpi-players", "—");
+        setText("kpi-teams", "—");
     }
-
 }
 
 
-/* ============================================================
-   PLAYER CONTROLS
-   ============================================================ */
-
-function setupPlayerControls() {
-
-    const select =
-        $("player-select");
-
-    if (!select) {
-        return;
-    }
-
-    select.addEventListener(
-        "change",
-        async event => {
-
-            const player =
-                event.target.value;
-
-            if (!player) {
-                return;
-            }
-
-            await loadPlayer(
-                player
-            );
-
-        }
-    );
-
-}
+/* =========================================================
+   PLAYERS
+========================================================= */
 
 async function loadPlayers() {
 
+    const select = $("player-select");
+
+    if (!select) return;
+
+
     try {
 
-        const data =
-            await apiFetch(
-                "/players"
-            );
+        const data = await apiFetch("/players");
 
         console.log(
-            "Players:",
+            "SportsIQ PLAYERS:",
             data
         );
 
-        const players =
+
+        let players =
             Array.isArray(data)
                 ? data
-                : data?.players ||
-                  data?.data ||
-                  [];
+                : (
+                    data.players ||
+                    data.data ||
+                    []
+                );
+
+
+        players = players.map(player => {
+
+            if (typeof player === "string") {
+                return player;
+            }
+
+            return (
+                player.name ||
+                player.player_name ||
+                player.Player ||
+                player.player
+            );
+        }).filter(Boolean);
+
+
+        players.sort();
+
+
+        select.innerHTML = "";
+
+
+        const defaultOption =
+            document.createElement("option");
+
+        defaultOption.value = "";
+        defaultOption.textContent =
+            "Select a player";
+
+        select.appendChild(defaultOption);
+
+
+        players.forEach(player => {
+
+            const option =
+                document.createElement("option");
+
+            option.value = player;
+            option.textContent = player;
+
+            select.appendChild(option);
+        });
+
+
+        console.log(
+            `Loaded ${players.length} players`
+        );
+
+
+        /* Matchup selectors */
 
         populatePlayerSelect(
-            players
+            "matchup-batter",
+            players,
+            "Select batter"
         );
+
+        populatePlayerSelect(
+            "matchup-bowler",
+            players,
+            "Select bowler"
+        );
+
 
     } catch (error) {
 
         console.error(
-            "Players error:",
+            "Players loading failed:",
             error
         );
 
+        select.innerHTML =
+            `<option value="">Unable to load players</option>`;
     }
-
 }
 
-function populatePlayerSelect(players) {
 
-    const select =
-        $("player-select");
+function populatePlayerSelect(
+    id,
+    players,
+    placeholder
+) {
 
-    if (!select) {
-        return;
-    }
+    const select = $(id);
 
-    const current =
-        select.value;
+    if (!select) return;
 
-    select.innerHTML =
-        `<option value="">Select Player</option>`;
+    select.innerHTML = "";
+
+    const first =
+        document.createElement("option");
+
+    first.value = "";
+    first.textContent = placeholder;
+
+    select.appendChild(first);
+
 
     players.forEach(player => {
 
-        const name =
-            typeof player === "string"
-                ? player
-                : player?.name ||
-                  player?.player ||
-                  player?.batter;
-
-        if (!name) {
-            return;
-        }
-
         const option =
-            document.createElement(
-                "option"
-            );
+            document.createElement("option");
 
-        option.value =
-            name;
+        option.value = player;
+        option.textContent = player;
 
-        option.textContent =
-            name;
-
-        select.appendChild(
-            option
-        );
-
+        select.appendChild(option);
     });
+}
 
-    if (current) {
-        select.value = current;
+
+/* =========================================================
+   PLAYER ANALYSIS
+========================================================= */
+
+function setupPlayerControls() {
+
+    const button = $("load-player-btn");
+
+    if (button) {
+
+        button.addEventListener(
+            "click",
+            loadSelectedPlayer
+        );
     }
 
-}
 
-async function loadPlayer(playerName) {
+    const backButton =
+        $("back-player-btn");
 
-    try {
+    if (backButton) {
 
-        const data =
-            await apiFetch(
-                `/player/${encode(playerName)}`
-            );
+        backButton.addEventListener(
+            "click",
+            () => {
 
-        console.log(
-            "Player:",
-            data
+                $("player-dashboard")
+                    ?.classList.add("hidden");
+
+                $("player-selector-view")
+                    ?.classList.remove("hidden");
+            }
         );
-
-        renderPlayer(
-            data
-        );
-
-        await loadPlayerIntelligence(
-            playerName
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Player error:",
-            error
-        );
-
-        showError(
-            ["player-error"],
-            error.message
-        );
-
     }
-
-}
-
-async function loadPlayerIntelligence(
-    playerName
-) {
-
-    try {
-
-        const data =
-            await apiFetch(
-                `/player/${encode(playerName)}/intelligence`
-            );
-
-        console.log(
-            "Player intelligence:",
-            data
-        );
-
-        renderPlayerIntelligence(
-            data
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Player intelligence error:",
-            error
-        );
-
-    }
-
-}
-
-function renderPlayer(data) {
-
-    const profile =
-        data?.profile ||
-        data?.data ||
-        data;
-
-    setText(
-        [
-            "player-name",
-            "selected-player-name"
-        ],
-        profile?.name ||
-        profile?.player ||
-        "Player"
-    );
-
-    setText(
-        [
-            "player-runs",
-            "runs-value"
-        ],
-        integer(
-            profile?.runs ??
-            profile?.total_runs
-        )
-    );
-
-    setText(
-        [
-            "player-average",
-            "average-value"
-        ],
-        number(
-            profile?.average ??
-            profile?.batting_average
-        )
-    );
-
-    setText(
-        [
-            "player-strike-rate",
-            "strike-rate-value"
-        ],
-        number(
-            profile?.strike_rate
-        )
-    );
-
-    setText(
-        [
-            "player-wickets",
-            "wickets-value"
-        ],
-        integer(
-            profile?.wickets ??
-            profile?.total_wickets
-        )
-    );
-
-    setText(
-        [
-            "player-economy",
-            "economy-value"
-        ],
-        number(
-            profile?.economy
-        )
-    );
-
-    setText(
-        [
-            "player-matches",
-            "matches-value"
-        ],
-        integer(
-            profile?.matches ??
-            profile?.total_matches
-        )
-    );
-
-}
-
-function renderPlayerIntelligence(
-    data
-) {
-
-    const profile =
-        data?.profile || {};
-
-    const dna =
-        data?.dna || {};
-
-    const context =
-        data?.context_score ??
-        data?.context ??
-        {};
-
-    const contextValue =
-        typeof context === "number"
-            ? context
-            : context?.score;
-
-    setText(
-        [
-            "context-score",
-            "player-context-score"
-        ],
-        number(contextValue)
-    );
-
-    setText(
-        ["player-role"],
-        profile?.role ||
-        dna?.role
-    );
-
-    setText(
-        ["player-archetype"],
-        dna?.archetype ||
-        profile?.archetype
-    );
-
 }
 
 
-/* ============================================================
-   TEAM CONTROLS
-   ============================================================ */
+async function loadSelectedPlayer() {
 
-function setupTeamControls() {
+    const select = $("player-select");
 
-    const select =
-        $("team-select");
+    const player =
+        select?.value;
 
-    if (!select) {
+
+    if (!player) {
+
+        alert("Please select a player.");
+
         return;
     }
 
-    select.addEventListener(
-        "change",
-        async event => {
 
-            const team =
-                event.target.value;
-
-            if (!team) {
-                return;
-            }
-
-            await loadTeam(
-                team
-            );
-
-        }
-    );
-
+    await loadPlayer(player);
 }
 
-async function loadTeams() {
+
+async function loadPlayer(player) {
+
+    currentPlayer = player;
+
+
+    $("player-selector-view")
+        ?.classList.add("hidden");
+
+
+    $("player-dashboard")
+        ?.classList.add("hidden");
+
+
+    $("player-loading")
+        ?.classList.remove("hidden");
+
+
+    $("player-error")
+        ?.classList.add("hidden");
+
 
     try {
 
         const data =
             await apiFetch(
-                "/teams"
+                `/player/${encodeURIComponent(player)}`
             );
 
+
         console.log(
-            "Teams:",
+            "PLAYER DETAIL:",
             data
         );
+
+
+        renderPlayer(data);
+
+
+        $("player-dashboard")
+            ?.classList.remove("hidden");
+
+    } catch (error) {
+
+        console.error(
+            "Player loading failed:",
+            error
+        );
+
+
+        const errorBox =
+            $("player-error");
+
+        if (errorBox) {
+
+            errorBox.textContent =
+                error.message;
+
+            errorBox.classList.remove("hidden");
+        }
+
+    } finally {
+
+        $("player-loading")
+            ?.classList.add("hidden");
+    }
+}
+
+
+function renderPlayer(data) {
+
+    const player =
+        data.player ||
+        data;
+
+
+    setText(
+        "player-name",
+        player.name ||
+        player.player_name ||
+        currentPlayer
+    );
+
+
+    setText(
+        "player-initial",
+        (
+            player.name ||
+            player.player_name ||
+            currentPlayer ||
+            "P"
+        ).charAt(0).toUpperCase()
+    );
+
+
+    setText(
+        "player-runs",
+        player.runs ??
+        player.total_runs
+    );
+
+
+    setText(
+        "player-average",
+        player.average ??
+        player.batting_average
+    );
+
+
+    setText(
+        "player-strike-rate",
+        player.strike_rate ??
+        player.strikeRate
+    );
+
+
+    setText(
+        "player-wickets",
+        player.wickets ??
+        player.total_wickets
+    );
+
+
+    setText(
+        "player-economy",
+        player.economy
+    );
+
+
+    setText(
+        "player-matches",
+        player.matches ??
+        player.total_matches
+    );
+}
+
+
+/* =========================================================
+   MATCHES
+========================================================= */
+
+async function loadMatches() {
+
+    const table =
+        $("matches-table");
+
+    if (!table) return;
+
+
+    try {
+
+        const data =
+            await apiFetch("/matches");
+
+
+        console.log(
+            "SportsIQ MATCHES:",
+            data
+        );
+
+
+        let matches =
+            Array.isArray(data)
+                ? data
+                : (
+                    data.matches ||
+                    data.data ||
+                    []
+                );
+
+
+        if (!matches.length) {
+
+            table.innerHTML =
+                `<tr>
+                    <td colspan="7">
+                        No matches found.
+                    </td>
+                </tr>`;
+
+            return;
+        }
+
+
+        table.innerHTML = "";
+
+
+        matches.forEach(match => {
+
+            const row =
+                document.createElement("tr");
+
+
+            const id =
+                match.id ??
+                match.match_id ??
+                "";
+
+
+            row.innerHTML = `
+                <td>${escapeHTML(
+                    match.id ??
+                    match.match_id ??
+                    "—"
+                )}</td>
+
+                <td>${escapeHTML(
+                    match.date ??
+                    match.match_date ??
+                    "—"
+                )}</td>
+
+                <td>${escapeHTML(
+                    match.season ??
+                    "—"
+                )}</td>
+
+                <td>${escapeHTML(
+                    match.teams ??
+                    match.team1 + " vs " + match.team2
+                    || "—"
+                )}</td>
+
+                <td>${escapeHTML(
+                    match.venue ??
+                    "—"
+                )}</td>
+
+                <td>${escapeHTML(
+                    match.winner ??
+                    "—"
+                )}</td>
+
+                <td>
+                    <button
+                        class="small-button match-view-btn"
+                        data-match-id="${escapeHTML(id)}"
+                    >
+                        View
+                    </button>
+                </td>
+            `;
+
+
+            table.appendChild(row);
+        });
+
+
+        document
+            .querySelectorAll(".match-view-btn")
+            .forEach(button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        loadMatch(
+                            button.dataset.matchId
+                        );
+                    }
+                );
+            });
+
+
+    } catch (error) {
+
+        console.error(
+            "Matches loading failed:",
+            error
+        );
+
+
+        table.innerHTML =
+            `<tr>
+                <td colspan="7">
+                    Failed to load matches.
+                </td>
+            </tr>`;
+    }
+}
+
+
+/* =========================================================
+   SEASONS
+========================================================= */
+
+async function loadSeasons() {
+
+    const select =
+        $("match-season-filter");
+
+    if (!select) return;
+
+
+    try {
+
+        const data =
+            await apiFetch("/seasons");
+
+
+        const seasons =
+            Array.isArray(data)
+                ? data
+                : (
+                    data.seasons ||
+                    data.data ||
+                    []
+                );
+
+
+        seasons.forEach(season => {
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                typeof season === "object"
+                    ? season.season
+                    : season;
+
+            option.textContent =
+                typeof season === "object"
+                    ? season.season
+                    : season;
+
+            select.appendChild(option);
+        });
+
+
+        select.addEventListener(
+            "change",
+            () => {
+
+                loadMatches();
+            }
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Season loading failed:",
+            error
+        );
+    }
+}
+
+
+/* =========================================================
+   MATCH DETAIL / MODAL
+========================================================= */
+
+async function loadMatch(matchId) {
+
+    if (!matchId) return;
+
+
+    const modal =
+        $("match-modal");
+
+    const details =
+        $("match-details");
+
+
+    if (!modal || !details) return;
+
+
+    modal.classList.remove("hidden");
+
+    details.innerHTML =
+        "Loading match...";
+
+
+    try {
+
+        const data =
+            await apiFetch(
+                `/match/${encodeURIComponent(matchId)}`
+            );
+
+
+        details.innerHTML =
+            `<pre>${escapeHTML(
+                JSON.stringify(data, null, 2)
+            )}</pre>`;
+
+
+    } catch (error) {
+
+        details.textContent =
+            error.message;
+    }
+}
+
+
+function setupModal() {
+
+    $("close-modal")
+        ?.addEventListener(
+            "click",
+            () => {
+
+                $("match-modal")
+                    ?.classList.add("hidden");
+            }
+        );
+
+
+    $("match-modal")
+        ?.addEventListener(
+            "click",
+            event => {
+
+                if (
+                    event.target.id === "match-modal"
+                ) {
+
+                    event.currentTarget
+                        .classList.add("hidden");
+                }
+            }
+        );
+}
+
+
+/* =========================================================
+   TEAMS
+========================================================= */
+
+async function loadTeams() {
+
+    const container =
+        $("teams-grid");
+
+    if (!container) return;
+
+
+    try {
+
+        const data =
+            await apiFetch("/teams");
+
+
+        console.log(
+            "SportsIQ TEAMS:",
+            data
+        );
+
 
         const teams =
             Array.isArray(data)
                 ? data
-                : data?.teams ||
-                  data?.data ||
-                  [];
+                : (
+                    data.teams ||
+                    data.data ||
+                    []
+                );
 
-        populateTeamSelect(
-            teams
-        );
+
+        container.innerHTML = "";
+
+
+        teams.forEach(team => {
+
+            const name =
+                typeof team === "string"
+                    ? team
+                    : (
+                        team.name ||
+                        team.team_name ||
+                        team.team
+                    );
+
+
+            if (!name) return;
+
+
+            const card =
+                document.createElement("button");
+
+            card.className =
+                "feature-card";
+
+
+            card.innerHTML = `
+                <div class="feature-icon">◆</div>
+
+                <div>
+                    <h3>${escapeHTML(name)}</h3>
+
+                    <p>
+                        Explore team batting,
+                        bowling and performance analytics.
+                    </p>
+                </div>
+
+                <span class="feature-arrow">→</span>
+            `;
+
+
+            card.addEventListener(
+                "click",
+                () => loadTeam(name)
+            );
+
+
+            container.appendChild(card);
+        });
+
 
     } catch (error) {
 
         console.error(
-            "Teams error:",
+            "Teams loading failed:",
             error
         );
 
-    }
 
+        container.innerHTML =
+            `<div class="error-state">
+                Failed to load teams.
+            </div>`;
+    }
 }
 
-function populateTeamSelect(teams) {
 
-    const select =
-        $("team-select");
+async function loadTeam(teamName) {
 
-    if (!select) {
-        return;
-    }
+    const detail =
+        $("team-detail");
 
-    select.innerHTML =
-        `<option value="">Select Team</option>`;
+    const list =
+        $("teams-view");
 
-    teams.forEach(team => {
 
-        const name =
-            typeof team === "string"
-                ? team
-                : team?.name ||
-                  team?.team;
+    if (!detail || !list) return;
 
-        if (!name) {
-            return;
-        }
 
-        const option =
-            document.createElement(
-                "option"
-            );
+    list.classList.add("hidden");
 
-        option.value =
-            name;
+    detail.classList.remove("hidden");
 
-        option.textContent =
-            name;
 
-        select.appendChild(
-            option
-        );
+    setText(
+        "team-detail-name",
+        teamName
+    );
 
-    });
 
-}
+    const content =
+        $("team-detail-content");
 
-async function loadTeam(
-    teamName
-) {
+
+    if (!content) return;
+
+
+    content.innerHTML =
+        `<div class="loading-state">
+            Loading team details...
+        </div>`;
+
 
     try {
 
         const data =
             await apiFetch(
-                `/team/${encode(teamName)}`
+                `/team/${encodeURIComponent(teamName)}`
             );
 
-        console.log(
-            "Team:",
-            data
-        );
 
-        renderTeam(
-            data
-        );
+        content.innerHTML =
+            `<pre>${escapeHTML(
+                JSON.stringify(data, null, 2)
+            )}</pre>`;
+
 
     } catch (error) {
 
-        console.error(
-            "Team error:",
-            error
-        );
-
-        showError(
-            ["team-error"],
-            error.message
-        );
-
+        content.innerHTML =
+            `<div class="error-state">
+                ${escapeHTML(error.message)}
+            </div>`;
     }
-
-}
-
-function renderTeam(data) {
-
-    const team =
-        data?.team ||
-        data?.data ||
-        data;
-
-    setText(
-        [
-            "team-name",
-            "selected-team-name"
-        ],
-        team?.name ||
-        team?.team ||
-        "Team"
-    );
-
-    setText(
-        [
-            "team-matches",
-            "team-matches-value"
-        ],
-        integer(
-            team?.matches
-        )
-    );
-
-    setText(
-        [
-            "team-wins",
-            "team-wins-value"
-        ],
-        integer(
-            team?.wins
-        )
-    );
-
-    setText(
-        [
-            "team-losses",
-            "team-losses-value"
-        ],
-        integer(
-            team?.losses
-        )
-    );
-
-    setText(
-        [
-            "team-win-rate",
-            "team-win-rate-value"
-        ],
-        percent(
-            team?.win_percentage ??
-            team?.win_rate
-        )
-    );
-
-    setText(
-        [
-            "team-runs",
-            "team-runs-value"
-        ],
-        integer(
-            team?.runs
-        )
-    );
-
-    setText(
-        [
-            "team-wickets",
-            "team-wickets-value"
-        ],
-        integer(
-            team?.wickets
-        )
-    );
-
 }
 
 
-/* ============================================================
-   VENUE CONTROLS
-   ============================================================ */
+function setupTeamControls() {
 
-function setupVenueControls() {
+    $("close-team-detail")
+        ?.addEventListener(
+            "click",
+            () => {
 
-    const select =
-        $("venue-select");
+                $("team-detail")
+                    ?.classList.add("hidden");
 
-    if (!select) {
-        return;
-    }
-
-    select.addEventListener(
-        "change",
-        async event => {
-
-            const venue =
-                event.target.value;
-
-            if (!venue) {
-                return;
+                $("teams-view")
+                    ?.classList.remove("hidden");
             }
-
-            await loadVenue(
-                venue
-            );
-
-        }
-    );
-
+        );
 }
+
+
+/* =========================================================
+   VENUES
+========================================================= */
 
 async function loadVenues() {
 
+    const container =
+        $("venues-grid");
+
+    if (!container) return;
+
+
     try {
 
         const data =
-            await apiFetch(
-                "/venues"
-            );
+            await apiFetch("/venues");
+
 
         console.log(
-            "Venues:",
+            "SportsIQ VENUES:",
             data
         );
+
 
         const venues =
             Array.isArray(data)
                 ? data
-                : data?.venues ||
-                  data?.data ||
-                  [];
+                : (
+                    data.venues ||
+                    data.data ||
+                    []
+                );
 
-        populateVenueSelect(
-            venues
-        );
+
+        container.innerHTML = "";
+
+
+        venues.forEach(venue => {
+
+            const name =
+                typeof venue === "string"
+                    ? venue
+                    : (
+                        venue.name ||
+                        venue.venue_name ||
+                        venue.venue
+                    );
+
+
+            if (!name) return;
+
+
+            const card =
+                document.createElement("button");
+
+            card.className =
+                "feature-card";
+
+
+            card.innerHTML = `
+                <div class="feature-icon">◇</div>
+
+                <div>
+                    <h3>${escapeHTML(name)}</h3>
+
+                    <p>
+                        Explore venue scoring
+                        and performance behaviour.
+                    </p>
+                </div>
+
+                <span class="feature-arrow">→</span>
+            `;
+
+
+            card.addEventListener(
+                "click",
+                () => loadVenue(name)
+            );
+
+
+            container.appendChild(card);
+        });
+
 
     } catch (error) {
 
         console.error(
-            "Venues error:",
+            "Venues loading failed:",
             error
         );
 
-    }
 
+        container.innerHTML =
+            `<div class="error-state">
+                Failed to load venues.
+            </div>`;
+    }
 }
 
-function populateVenueSelect(
-    venues
-) {
 
-    const select =
-        $("venue-select");
+async function loadVenue(venueName) {
 
-    if (!select) {
-        return;
-    }
+    const detail =
+        $("venue-detail");
 
-    select.innerHTML =
-        `<option value="">Select Venue</option>`;
+    const list =
+        $("venues-view");
 
-    venues.forEach(venue => {
 
-        const name =
-            typeof venue === "string"
-                ? venue
-                : venue?.name ||
-                  venue?.venue;
+    if (!detail || !list) return;
 
-        if (!name) {
-            return;
-        }
 
-        const option =
-            document.createElement(
-                "option"
-            );
+    list.classList.add("hidden");
 
-        option.value =
-            name;
+    detail.classList.remove("hidden");
 
-        option.textContent =
-            name;
 
-        select.appendChild(
-            option
-        );
+    setText(
+        "venue-detail-name",
+        venueName
+    );
 
-    });
 
-}
+    const content =
+        $("venue-detail-content");
 
-async function loadVenue(
-    venueName
-) {
+
+    if (!content) return;
+
+
+    content.innerHTML =
+        `<div class="loading-state">
+            Loading venue details...
+        </div>`;
+
 
     try {
 
         const data =
             await apiFetch(
-                `/venue/${encode(venueName)}`
+                `/venue/${encodeURIComponent(venueName)}`
             );
 
-        console.log(
-            "Venue:",
-            data
-        );
 
-        renderVenue(
-            data
-        );
+        content.innerHTML =
+            `<pre>${escapeHTML(
+                JSON.stringify(data, null, 2)
+            )}</pre>`;
+
 
     } catch (error) {
 
-        console.error(
-            "Venue error:",
-            error
-        );
-
-        showError(
-            ["venue-error"],
-            error.message
-        );
-
+        content.innerHTML =
+            `<div class="error-state">
+                ${escapeHTML(error.message)}
+            </div>`;
     }
-
-}
-
-function renderVenue(data) {
-
-    const venue =
-        data?.venue ||
-        data?.data ||
-        data;
-
-    setText(
-        [
-            "venue-name",
-            "selected-venue-name"
-        ],
-        venue?.name ||
-        venue?.venue ||
-        "Venue"
-    );
-
-    setText(
-        [
-            "venue-matches",
-            "venue-matches-value"
-        ],
-        integer(
-            venue?.matches
-        )
-    );
-
-    setText(
-        [
-            "venue-runs",
-            "venue-runs-value"
-        ],
-        integer(
-            venue?.runs
-        )
-    );
-
-    setText(
-        [
-            "venue-average",
-            "venue-average-value"
-        ],
-        number(
-            venue?.average_runs
-        )
-    );
-
-    setText(
-        [
-            "venue-run-rate",
-            "venue-run-rate-value"
-        ],
-        number(
-            venue?.run_rate
-        )
-    );
-
-    setText(
-        [
-            "venue-boundaries",
-            "venue-boundaries-value"
-        ],
-        integer(
-            venue?.boundaries
-        )
-    );
-
-    setText(
-        [
-            "venue-sixes",
-            "venue-sixes-value"
-        ],
-        integer(
-            venue?.sixes
-        )
-    );
-
 }
 
 
-/* ============================================================
-   MATCHES
-   ============================================================ */
+function setupVenueControls() {
 
-async function loadMatches() {
+    $("close-venue-detail")
+        ?.addEventListener(
+            "click",
+            () => {
 
-    try {
+                $("venue-detail")
+                    ?.classList.add("hidden");
 
-        const data =
-            await apiFetch(
-                "/matches"
-            );
-
-        console.log(
-            "Matches:",
-            data
+                $("venues-view")
+                    ?.classList.remove("hidden");
+            }
         );
-
-        const matches =
-            Array.isArray(data)
-                ? data
-                : data?.matches ||
-                  data?.data ||
-                  [];
-
-        renderMatches(
-            matches
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Matches error:",
-            error
-        );
-
-    }
-
-}
-
-function renderMatches(
-    matches
-) {
-
-    const containers =
-        [
-            $("matches-list"),
-            $("recent-matches"),
-            $("match-list")
-        ].filter(Boolean);
-
-    if (!containers.length) {
-        return;
-    }
-
-    const html =
-        matches
-            .slice(-20)
-            .reverse()
-            .map(match => {
-
-                const id =
-                    match?.id ??
-                    match?.match_id ??
-                    "—";
-
-                let teams =
-                    match?.name ||
-                    match?.match ||
-                    "";
-
-                if (
-                    match?.team1 &&
-                    match?.team2
-                ) {
-
-                    teams =
-                        `${match.team1} vs ${match.team2}`;
-
-                }
-
-                if (!teams) {
-                    teams = "Match";
-                }
-
-                return `
-                    <div class="match-item">
-
-                        <strong>
-                            ${escapeHTML(teams)}
-                        </strong>
-
-                        <span>
-                            Match ${escapeHTML(id)}
-                        </span>
-
-                    </div>
-                `;
-
-            })
-            .join("");
-
-    containers.forEach(
-        container => {
-
-            container.innerHTML =
-                html ||
-                "<p>No matches available.</p>";
-
-        }
-    );
-
 }
 
 
-/* ============================================================
+/* =========================================================
    MATCHUP
-   ============================================================ */
+========================================================= */
 
 function setupMatchup() {
 
-    const button =
-        $("matchup-btn") ||
-        $("analyze-matchup") ||
-        $("matchup-submit");
-
-    if (!button) {
-        return;
-    }
-
-    if (
-        button.dataset.bound === "true"
-    ) {
-        return;
-    }
-
-    button.dataset.bound = "true";
-
-    button.addEventListener(
-        "click",
-        analyzeMatchup
-    );
-
+    $("matchup-btn")
+        ?.addEventListener(
+            "click",
+            loadMatchup
+        );
 }
 
-async function analyzeMatchup() {
+
+async function loadMatchup() {
 
     const batter =
-        getInputValue([
-            "batter-select",
-            "matchup-batter",
-            "batter"
-        ]);
+        $("matchup-batter")?.value;
 
     const bowler =
-        getInputValue([
-            "bowler-select",
-            "matchup-bowler",
-            "bowler"
-        ]);
+        $("matchup-bowler")?.value;
 
-    if (
-        !batter ||
-        !bowler
-    ) {
 
-        showError(
-            ["matchup-error"],
-            "Select both a batter and a bowler."
+    if (!batter || !bowler) {
+
+        alert(
+            "Please select both a batter and a bowler."
         );
 
         return;
     }
+
+
+    const result =
+        $("matchup-result");
+
+
+    if (!result) return;
+
+
+    result.innerHTML =
+        `<div class="loading-state">
+            Analysing matchup...
+        </div>`;
+
 
     try {
 
         const data =
             await apiFetch(
-                `/matchup?batter=${encode(batter)}&bowler=${encode(bowler)}`
+                `/matchup?batter=${encodeURIComponent(batter)}&bowler=${encodeURIComponent(bowler)}`
             );
 
+
         console.log(
-            "Matchup:",
+            "MATCHUP:",
             data
         );
 
-        renderMatchup(
-            data
-        );
+
+        result.innerHTML =
+            `<pre>${escapeHTML(
+                JSON.stringify(data, null, 2)
+            )}</pre>`;
+
 
     } catch (error) {
 
-        console.error(
-            "Matchup error:",
-            error
-        );
-
-        showError(
-            ["matchup-error"],
-            error.message
-        );
-
+        result.innerHTML =
+            `<div class="error-state">
+                ${escapeHTML(error.message)}
+            </div>`;
     }
-
-}
-
-function renderMatchup(
-    data
-) {
-
-    const matchup =
-        data?.matchup ||
-        data?.data ||
-        data;
-
-    setText(
-        ["matchup-runs"],
-        integer(
-            matchup?.runs
-        )
-    );
-
-    setText(
-        ["matchup-dismissals"],
-        integer(
-            matchup?.dismissals ??
-            matchup?.wickets
-        )
-    );
-
-    setText(
-        ["matchup-balls"],
-        integer(
-            matchup?.balls
-        )
-    );
-
-    setText(
-        ["matchup-strike-rate"],
-        number(
-            matchup?.strike_rate
-        )
-    );
-
 }
 
 
-/* ============================================================
-   INPUT HELPER
-   ============================================================ */
-
-function getInputValue(
-    ids
-) {
-
-    for (
-        const id of ids
-    ) {
-
-        const element =
-            $(id);
-
-        if (
-            element &&
-            element.value
-        ) {
-
-            return element.value.trim();
-
-        }
-
-    }
-
-    return "";
-}
-
-
-/* ============================================================
+/* =========================================================
    AI ANALYST
-   ============================================================ */
+========================================================= */
 
 function setupAI() {
 
     console.log(
-        "Initializing SportsIQ AI..."
+        "SportsIQ: setting up AI"
     );
 
-    /*
-     * Support both possible HTML ID sets.
-     */
 
-    const configurations = [
-
-        {
-            input:
-                "ai-question",
-
-            button:
-                "ai-send",
-
-            messages:
-                "ai-messages"
-        },
-
-        {
-            input:
-                "ai-question-global",
-
-            button:
-                "ai-send-global",
-
-            messages:
-                "ai-messages-global"
-        }
-
+    const inputs = [
+        "ai-question",
+        "ai-question-global"
     ];
 
-    let found =
-        false;
 
-    configurations.forEach(
-        config => {
+    const buttons = [
+        "ai-send",
+        "ai-send-global"
+    ];
 
-            const input =
-                $(config.input);
 
-            const button =
-                $(config.button);
+    inputs.forEach(id => {
 
-            if (
-                !input ||
-                !button
-            ) {
-                return;
-            }
+        const input = $(id);
 
-            found =
-                true;
+        if (!input) return;
 
-            console.log(
-                `AI interface found: #${config.input}`
-            );
 
-            if (
-                button.dataset.aiBound ===
-                "true"
-            ) {
-                return;
-            }
+        input.addEventListener(
+            "keydown",
+            event => {
 
-            button.dataset.aiBound =
-                "true";
+                if (
+                    event.key === "Enter" &&
+                    !event.shiftKey
+                ) {
 
-            button.addEventListener(
-                "click",
-                async () => {
+                    event.preventDefault();
 
-                    await sendAIQuestion(
-                        config
-                    );
-
+                    sendAIQuestion(input);
                 }
-            );
-
-            input.addEventListener(
-                "keydown",
-                async event => {
-
-                    if (
-                        event.key ===
-                            "Enter" &&
-                        !event.shiftKey
-                    ) {
-
-                        event.preventDefault();
-
-                        await sendAIQuestion(
-                            config
-                        );
-
-                    }
-
-                }
-            );
-
-        }
-    );
-
-    if (!found) {
-
-        console.error(
-            "SportsIQ AI ERROR: No AI input/button found."
+            }
         );
+    });
 
-    }
 
+    buttons.forEach(id => {
+
+        const button = $(id);
+
+        if (!button) return;
+
+
+        button.addEventListener(
+            "click",
+            () => {
+
+                const input =
+                    id === "ai-send"
+                        ? $("ai-question")
+                        : $("ai-question-global");
+
+
+                sendAIQuestion(input);
+            }
+        );
+    });
 }
 
 
-async function sendAIQuestion(
-    config
-) {
+async function sendAIQuestion(input) {
 
-    const input =
-        $(config.input);
+    if (!input) return;
 
-    const button =
-        $(config.button);
-
-    const messages =
-        $(config.messages);
-
-    if (!input) {
-
-        console.error(
-            `Missing AI input: #${config.input}`
-        );
-
-        return;
-
-    }
-
-    if (!button) {
-
-        console.error(
-            `Missing AI button: #${config.button}`
-        );
-
-        return;
-
-    }
-
-    if (!messages) {
-
-        console.error(
-            `Missing AI messages: #${config.messages}`
-        );
-
-        return;
-
-    }
 
     const question =
         input.value.trim();
 
-    if (!question) {
-        return;
-    }
 
-    console.log(
-        "SportsIQ AI QUESTION:",
-        question
-    );
+    if (!question) return;
 
 
-    /* --------------------------------------------
-       USER MESSAGE
-       -------------------------------------------- */
+    const container =
+        input.id === "ai-question"
+            ? $("ai-messages")
+            : $("ai-messages-global");
+
 
     appendAIMessage(
-        config.messages,
+        container,
         "You",
         question,
         "user"
     );
 
+
     input.value = "";
 
-
-    /* --------------------------------------------
-       BUTTON LOADING
-       -------------------------------------------- */
-
-    const originalText =
-        button.textContent;
-
-    button.disabled =
-        true;
-
-    button.textContent =
-        "Thinking...";
-
-
-    /* --------------------------------------------
-       LOADING MESSAGE
-       -------------------------------------------- */
-
-    const loading =
-        document.createElement(
-            "div"
-        );
-
-    loading.className =
-        "ai-message ai";
-
-    loading.id =
-        `sportsiq-ai-loading-${Date.now()}`;
-
-    loading.innerHTML = `
-        <strong>SportsIQ AI</strong>
-        <p>Analyzing cricket data...</p>
-    `;
-
-    messages.appendChild(
-        loading
-    );
-
-    messages.scrollTop =
-        messages.scrollHeight;
-
-
-    /* --------------------------------------------
-       API REQUEST
-       -------------------------------------------- */
 
     try {
 
         console.log(
-            "SportsIQ AI → POST /ai/chat"
+            "SportsIQ AI QUESTION:",
+            question
         );
+
 
         const data =
             await apiFetch(
                 "/ai/chat",
                 {
-                    method:
-                        "POST",
-
-                    body:
-                        JSON.stringify({
-                            question:
-                                question
-                        }),
-
-                    timeout:
-                        90000
+                    method: "POST",
+                    body: JSON.stringify({
+                        question: question
+                    })
                 }
             );
+
 
         console.log(
             "SportsIQ AI RESPONSE:",
             data
         );
 
-        loading.remove();
 
         const answer =
-            data?.answer ||
-            data?.response ||
-            data?.message ||
-            "SportsIQ AI did not return an answer.";
+            data.answer ||
+            data.response ||
+            data.message ||
+            "No answer returned.";
+
 
         appendAIMessage(
-            config.messages,
+            container,
             "SportsIQ AI",
             answer,
             "ai"
         );
+
 
     } catch (error) {
 
@@ -1891,218 +1537,180 @@ async function sendAIQuestion(
             error
         );
 
-        loading.remove();
 
         appendAIMessage(
-            config.messages,
+            container,
             "SportsIQ AI",
-            `Unable to process the request.\n\n${error.message}`,
-            "ai error"
+            `Error: ${error.message}`,
+            "ai"
         );
-
-    } finally {
-
-        button.disabled =
-            false;
-
-        button.textContent =
-            originalText;
-
-        input.focus();
-
     }
-
 }
 
 
 function appendAIMessage(
-    containerId,
+    container,
     sender,
     message,
     type
 ) {
 
-    const container =
-        $(containerId);
+    if (!container) return;
 
-    if (!container) {
-
-        console.error(
-            `AI message container not found: #${containerId}`
-        );
-
-        return;
-
-    }
 
     const div =
-        document.createElement(
-            "div"
-        );
+        document.createElement("div");
+
 
     div.className =
         `ai-message ${type || ""}`;
 
 
     const strong =
-        document.createElement(
-            "strong"
-        );
+        document.createElement("strong");
 
     strong.textContent =
         sender;
 
 
     const p =
-        document.createElement(
-            "p"
-        );
+        document.createElement("p");
 
     p.textContent =
         message;
 
 
-    div.appendChild(
-        strong
-    );
+    div.appendChild(strong);
+    div.appendChild(p);
 
-    div.appendChild(
-        p
-    );
 
-    container.appendChild(
-        div
-    );
+    container.appendChild(div);
+
 
     container.scrollTop =
         container.scrollHeight;
-
 }
 
 
-/* ============================================================
+/* =========================================================
    REFRESH
-   ============================================================ */
+========================================================= */
 
 function setupRefresh() {
 
-    const buttons =
-        document.querySelectorAll(
-            "#refresh-btn, .refresh-btn, [data-refresh]"
-        );
+    $("refresh-btn")
+        ?.addEventListener(
+            "click",
+            async () => {
 
-    buttons.forEach(
-        button => {
+                const button =
+                    $("refresh-btn");
 
-            if (
-                button.dataset.refreshBound ===
-                "true"
-            ) {
-                return;
-            }
 
-            button.dataset.refreshBound =
-                "true";
+                if (button) {
 
-            button.addEventListener(
-                "click",
-                async () => {
-
-                    button.disabled =
-                        true;
-
-                    try {
-
-                        await Promise.allSettled([
-                            loadHealth(),
-                            loadOverview(),
-                            loadPlayers(),
-                            loadMatches(),
-                            loadTeams(),
-                            loadVenues()
-                        ]);
-
-                    } finally {
-
-                        button.disabled =
-                            false;
-
-                    }
-
+                    button.disabled = true;
                 }
-            );
-
-        }
-    );
-
-}
 
 
-/* ============================================================
-   MODAL
-   ============================================================ */
+                try {
 
-function setupModal() {
+                    await Promise.allSettled([
+                        loadHealth(),
+                        loadOverview(),
+                        loadPlayers(),
+                        loadMatches(),
+                        loadTeams(),
+                        loadVenues()
+                    ]);
 
-    const closeButtons =
-        document.querySelectorAll(
-            ".modal-close, [data-modal-close]"
-        );
+                } finally {
 
-    closeButtons.forEach(
-        button => {
-
-            button.addEventListener(
-                "click",
-                closeModal
-            );
-
-        }
-    );
-
-    document.addEventListener(
-        "keydown",
-        event => {
-
-            if (
-                event.key === "Escape"
-            ) {
-
-                closeModal();
-
-            }
-
-        }
-    );
-
-}
-
-function closeModal() {
-
-    document
-        .querySelectorAll(
-            ".modal"
-        )
-        .forEach(
-            modal => {
-
-                modal.classList.remove(
-                    "active"
-                );
-
-                modal.style.display =
-                    "none";
-
+                    if (button) {
+                        button.disabled = false;
+                    }
+                }
             }
         );
-
 }
 
 
-/* ============================================================
-   FINAL DEBUG MESSAGE
-   ============================================================ */
+/* =========================================================
+   INITIALIZATION
+========================================================= */
 
-console.log(
-    "SportsIQ app.js initialized."
+document.addEventListener(
+    "DOMContentLoaded",
+    async () => {
+
+        console.log(
+            "================================"
+        );
+
+        console.log(
+            "SportsIQ frontend starting..."
+        );
+
+        console.log(
+            "================================"
+        );
+
+
+        try {
+
+            setupNavigation();
+
+            setupPlayerControls();
+
+            setupAI();
+
+            setupModal();
+
+            setupRefresh();
+
+            setupTeamControls();
+
+            setupVenueControls();
+
+            setupMatchup();
+
+
+            showSection("dashboard");
+
+
+            /*
+             * Do NOT let one failed API request
+             * stop the others.
+             */
+
+            await Promise.allSettled([
+
+                loadHealth(),
+
+                loadOverview(),
+
+                loadPlayers(),
+
+                loadMatches(),
+
+                loadTeams(),
+
+                loadVenues()
+
+            ]);
+
+
+            console.log(
+                "SportsIQ frontend initialized."
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "SportsIQ INITIALIZATION ERROR:",
+                error
+            );
+        }
+    }
 );
