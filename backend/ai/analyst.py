@@ -19,19 +19,19 @@ class AIAnalyst:
             except Exception:
                 self.client = None
 
-    def ask(self, question, context):
+   class AIAnalyst:
 
-        if not self.client:
-            overview = context.get("overview", {})
+         def __init__(self):
+             pass
 
-            return (
-                "AI Analyst is running in demo mode. "
-                "GEMINI_API_KEY is not available. "
-                f"SportsIQ currently contains "
-                f"{overview.get('players', 0)} players and "
-                f"{overview.get('matches', 0)} matches."
-            )
+         def ask(self, question, context):
 
+             return (
+                 f"SportsIQ received your question: {question}\n\n"
+                 f"Analytics engine currently contains "
+                 f"{context['overview']['players']} players and "
+                 f"{context['overview']['matches']} matches."
+             )
         # Convert analytics context into readable JSON
         try:
             context_text = json.dumps(
