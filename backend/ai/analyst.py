@@ -1,9 +1,11 @@
 import os
+import traceback
 
 
 class AIAnalyst:
 
     def __init__(self):
+
         self.key = os.getenv("GEMINI_API_KEY")
         self.client = None
 
@@ -12,6 +14,7 @@ class AIAnalyst:
             return
 
         try:
+
             from google import genai
 
             self.client = genai.Client(
@@ -21,17 +24,18 @@ class AIAnalyst:
             print("Gemini AI client initialized successfully.")
 
         except Exception as e:
-            print(
-                "Gemini initialization failed:",
-                repr(e)
-            )
+
+            print("Gemini initialization failed:")
+            print(repr(e))
+
+            traceback.print_exc()
 
             self.client = None
 
     def ask(self, question, context):
 
         # ----------------------------------------------------
-        # No Gemini client
+        # Check Gemini client
         # ----------------------------------------------------
 
         if not self.client:
@@ -75,23 +79,34 @@ SportsIQ Analytics Context:
 
         try:
 
-            print(
-                f"Sending SportsIQ AI question: {question}"
-            )
+            print("=" * 60)
+            print("SPORTSIQ AI REQUEST")
+            print("Question:", question)
+            print("=" * 60)
 
             response = self.client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt
             )
 
-            print("Gemini response received.")
+            print("Gemini API request completed.")
+
+            # ------------------------------------------------
+            # Empty response
+            # ------------------------------------------------
 
             if response is None:
+
+                print("ERROR: Gemini returned None.")
 
                 return (
                     "SportsIQ AI received no response from "
                     "the Gemini service."
                 )
+
+            # ------------------------------------------------
+            # Extract text
+            # ------------------------------------------------
 
             answer = getattr(
                 response,
@@ -101,7 +116,17 @@ SportsIQ Analytics Context:
 
             if answer:
 
+                print("Gemini answer received successfully.")
+
                 return answer.strip()
+
+            # ------------------------------------------------
+            # Unexpected response
+            # ------------------------------------------------
+
+            print("WARNING: Gemini response contained no text.")
+            print("Raw response:")
+            print(response)
 
             return (
                 "Gemini returned an empty answer. "
@@ -110,13 +135,30 @@ SportsIQ Analytics Context:
 
         except Exception as e:
 
-            print(
-                "Gemini API error:",
-                repr(e)
-            )
+            # ------------------------------------------------
+            # IMPORTANT:
+            # Do NOT hide the real Gemini error.
+            # ------------------------------------------------
+
+            print("=" * 60)
+            print("GEMINI API ERROR")
+            print("=" * 60)
+
+            print("Error type:")
+            print(type(e).__name__)
+
+            print("Error message:")
+            print(str(e))
+
+            print("Full error:")
+            print(repr(e))
+
+            print("Traceback:")
+            traceback.print_exc()
+
+            print("=" * 60)
 
             return (
-                "SportsIQ AI could not process the request "
-                "through Gemini right now. "
-                "Please try again."
+                "SportsIQ AI encountered a Gemini API error. "
+                "Check the Render logs for the exact error."
             )
