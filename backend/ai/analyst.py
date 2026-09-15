@@ -1,5 +1,4 @@
 import os
-import json
 
 
 class AIAnalyst:
@@ -8,87 +7,116 @@ class AIAnalyst:
         self.key = os.getenv("GEMINI_API_KEY")
         self.client = None
 
-        if self.key:
-            try:
-                from google import genai
+        if not self.key:
+            print("WARNING: GEMINI_API_KEY is not set.")
+            return
 
-                self.client = genai.Client(
-                    api_key=self.key
-                )
-
-            except Exception:
-                self.client = None
-
-   class AIAnalyst:
-
-         def __init__(self):
-             pass
-
-         def ask(self, question, context):
-
-             return (
-                 f"SportsIQ received your question: {question}\n\n"
-                 f"Analytics engine currently contains "
-                 f"{context['overview']['players']} players and "
-                 f"{context['overview']['matches']} matches."
-             )
-        # Convert analytics context into readable JSON
         try:
-            context_text = json.dumps(
-                context,
-                indent=2,
-                default=str
+            from google import genai
+
+            self.client = genai.Client(
+                api_key=self.key
             )
-        except Exception:
-            context_text = str(context)
+
+            print("Gemini AI client initialized successfully.")
+
+        except Exception as e:
+            print(
+                "Gemini initialization failed:",
+                repr(e)
+            )
+
+            self.client = None
+
+    def ask(self, question, context):
+
+        # ----------------------------------------------------
+        # No Gemini client
+        # ----------------------------------------------------
+
+        if not self.client:
+
+            return (
+                "SportsIQ AI is currently unavailable because "
+                "the Gemini AI client could not be initialized."
+            )
+
+        # ----------------------------------------------------
+        # Build prompt
+        # ----------------------------------------------------
 
         prompt = f"""
-You are SportsIQ, an advanced IPL cricket analytics assistant.
+You are SportsIQ, an IPL cricket analytics assistant.
 
-Your job is to answer questions using ONLY the SportsIQ analytics
-context supplied below.
+Your job is to answer questions using ONLY the supplied
+SportsIQ analytics context.
 
 IMPORTANT RULES:
 
-1. Never invent statistics.
-2. Never use statistics that are not present in the context.
-3. If the supplied context does not contain enough information,
-   clearly say that the available SportsIQ data is insufficient.
-4. Explain conclusions using the actual statistics provided.
-5. Keep answers concise but useful.
-6. Use cricket terminology naturally.
-7. When comparing players or teams, explicitly mention the
-   relevant numbers.
-8. When discussing a player, distinguish between career/overall
-   statistics, recent form, season statistics, phase performance,
-   and contextual metrics when available.
-9. Do not claim that a player or team is "best" unless the
-   supplied statistics support that conclusion.
-10. Do not provide information about matches, players, teams,
-    venues or seasons that is absent from the supplied context.
+1. Do not invent statistics.
+2. Do not use statistics that are not present in the context.
+3. If the requested information is unavailable, clearly say so.
+4. Use actual numbers from the context whenever possible.
+5. Keep answers concise and useful.
+6. Explain the relevant evidence behind the answer.
+7. You can compare players, teams, venues and matchups
+   when the supplied context contains the required data.
 
-USER QUESTION:
+User Question:
 {question}
 
-SPORTSIQ ANALYTICS CONTEXT:
-{context_text}
-
-Now answer the user's question based strictly on the data above.
+SportsIQ Analytics Context:
+{context}
 """
 
+        # ----------------------------------------------------
+        # Gemini request
+        # ----------------------------------------------------
+
         try:
+
+            print(
+                f"Sending SportsIQ AI question: {question}"
+            )
 
             response = self.client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=prompt
             )
 
-            if response and response.text:
-                return response.text.strip()
+            print("Gemini response received.")
 
-            return "SportsIQ could not generate an answer from the available analytics."
+            if response is None:
 
-        except Exception as error:
+                return (
+                    "SportsIQ AI received no response from "
+                    "the Gemini service."
+                )
 
-            return f"AI service error: {error}"
-            
+            answer = getattr(
+                response,
+                "text",
+                None
+            )
+
+            if answer:
+
+                return answer.strip()
+
+            return (
+                "Gemini returned an empty answer. "
+                "Please try another cricket question."
+            )
+
+        except Exception as e:
+
+            print(
+                "Gemini API error:",
+                repr(e)
+            )
+
+            return (
+                "SportsIQ AI could not process the request "
+                "through Gemini right now. "
+                "Please try again."
+            )
