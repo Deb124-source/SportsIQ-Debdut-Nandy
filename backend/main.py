@@ -110,7 +110,9 @@ matches_df.columns = [
 # DERIVED BOWLING TEAM
 # ============================================================
 
-def add_bowling_team(dataframe: pd.DataFrame) -> pd.DataFrame:
+def add_bowling_team(
+    dataframe: pd.DataFrame
+) -> pd.DataFrame:
 
     data = dataframe.copy()
 
@@ -123,7 +125,6 @@ def add_bowling_team(dataframe: pd.DataFrame) -> pd.DataFrame:
         or "team_2" not in data.columns
     ):
         data["bowling_team"] = ""
-
         return data
 
     data["bowling_team"] = data.apply(
@@ -174,40 +175,48 @@ def clean_for_json(value):
         return None
 
     if isinstance(value, float):
+
         if math.isnan(value) or math.isinf(value):
             return None
 
         return value
 
     if hasattr(value, "item"):
+
         try:
             return clean_for_json(value.item())
+
         except Exception:
             pass
 
     if isinstance(value, pd.DataFrame):
+
         return clean_for_json(
             value.to_dict(orient="records")
         )
 
     if isinstance(value, pd.Series):
+
         return clean_for_json(
             value.to_dict()
         )
 
     if isinstance(value, dict):
+
         return {
             str(key): clean_for_json(val)
             for key, val in value.items()
         }
 
     if isinstance(value, list):
+
         return [
             clean_for_json(item)
             for item in value
         ]
 
     if isinstance(value, tuple):
+
         return [
             clean_for_json(item)
             for item in value
@@ -220,7 +229,9 @@ def clean_for_json(value):
 # HELPER FUNCTIONS
 # ============================================================
 
-def find_team(team_name: str) -> Optional[str]:
+def find_team(
+    team_name: str
+) -> Optional[str]:
 
     target = team_name.strip().lower()
 
@@ -279,7 +290,9 @@ def find_team(team_name: str) -> Optional[str]:
     return None
 
 
-def find_venue(venue_name: str) -> Optional[str]:
+def find_venue(
+    venue_name: str
+) -> Optional[str]:
 
     if "venue" not in df.columns:
         return None
@@ -301,7 +314,9 @@ def find_venue(venue_name: str) -> Optional[str]:
     return None
 
 
-def get_team_matches(team_name: str):
+def get_team_matches(
+    team_name: str
+):
 
     target = team_name.strip().lower()
 
@@ -324,7 +339,9 @@ def get_team_matches(team_name: str):
     return matches_df[mask].copy()
 
 
-def get_team_batting_df(team_name: str):
+def get_team_batting_df(
+    team_name: str
+):
 
     target = team_name.strip().lower()
 
@@ -336,7 +353,9 @@ def get_team_batting_df(team_name: str):
     ].copy()
 
 
-def get_team_bowling_df(team_name: str):
+def get_team_bowling_df(
+    team_name: str
+):
 
     target = team_name.strip().lower()
 
@@ -388,8 +407,7 @@ def health():
         )
 
         matches = (
-            matches_df["match_id"]
-            .nunique()
+            matches_df["match_id"].nunique()
             if "match_id" in matches_df.columns
             else len(matches_df)
         )
@@ -457,7 +475,9 @@ def players():
 # ============================================================
 
 @app.get("/api/player/{player_name}")
-def player_profile(player_name: str):
+def player_profile(
+    player_name: str
+):
 
     try:
 
@@ -480,7 +500,9 @@ def player_profile(player_name: str):
 # ============================================================
 
 @app.get("/api/player/{player_name}/similar")
-def similar_players(player_name: str):
+def similar_players(
+    player_name: str
+):
 
     try:
 
@@ -503,7 +525,9 @@ def similar_players(player_name: str):
 # ============================================================
 
 @app.get("/api/player/{player_name}/phases")
-def player_phases(player_name: str):
+def player_phases(
+    player_name: str
+):
 
     try:
 
@@ -526,7 +550,9 @@ def player_phases(player_name: str):
 # ============================================================
 
 @app.get("/api/player/{player_name}/dna")
-def player_dna(player_name: str):
+def player_dna(
+    player_name: str
+):
 
     try:
 
@@ -549,7 +575,9 @@ def player_dna(player_name: str):
 # ============================================================
 
 @app.get("/api/player/{player_name}/context-score")
-def player_context_score(player_name: str):
+def player_context_score(
+    player_name: str
+):
 
     try:
 
@@ -572,7 +600,9 @@ def player_context_score(player_name: str):
 # ============================================================
 
 @app.get("/api/player/{player_name}/intelligence")
-def player_intelligence(player_name: str):
+def player_intelligence(
+    player_name: str
+):
 
     try:
 
@@ -657,6 +687,7 @@ def teams():
         all_teams = set()
 
         if "team_1" in matches_df.columns:
+
             all_teams.update(
                 matches_df["team_1"]
                 .dropna()
@@ -665,6 +696,7 @@ def teams():
             )
 
         if "team_2" in matches_df.columns:
+
             all_teams.update(
                 matches_df["team_2"]
                 .dropna()
@@ -754,7 +786,9 @@ def teams():
 # ============================================================
 
 @app.get("/api/team/{team_name}")
-def team_detail(team_name: str):
+def team_detail(
+    team_name: str
+):
 
     try:
 
@@ -778,10 +812,6 @@ def team_detail(team_name: str):
         bowling_df = get_team_bowling_df(
             actual_team
         )
-
-        # ----------------------------------------------------
-        # BASIC TEAM METRICS
-        # ----------------------------------------------------
 
         matches_count = len(team_matches)
 
@@ -855,10 +885,6 @@ def team_detail(team_name: str):
                 valid_wickets["wicket"].sum()
             )
 
-        # ----------------------------------------------------
-        # TOP BATTERS
-        # ----------------------------------------------------
-
         top_batters = []
 
         if not batting_df.empty:
@@ -881,10 +907,6 @@ def team_detail(team_name: str):
                         "runs": int(player_runs),
                     }
                 )
-
-        # ----------------------------------------------------
-        # TOP BOWLERS
-        # ----------------------------------------------------
 
         top_bowlers = []
 
@@ -926,10 +948,6 @@ def team_detail(team_name: str):
                         ),
                     }
                 )
-
-        # ----------------------------------------------------
-        # PHASE SCORING
-        # ----------------------------------------------------
 
         phase_stats = []
 
@@ -973,10 +991,6 @@ def team_detail(team_name: str):
                         "strike_rate": phase_sr,
                     }
                 )
-
-        # ----------------------------------------------------
-        # RECENT MATCHES
-        # ----------------------------------------------------
 
         recent_matches = []
 
@@ -1079,7 +1093,6 @@ def venues():
     try:
 
         if "venue" not in df.columns:
-
             return []
 
         venue_data = []
@@ -1152,7 +1165,9 @@ def venues():
 # ============================================================
 
 @app.get("/api/venue/{venue_name}")
-def venue_detail(venue_name: str):
+def venue_detail(
+    venue_name: str
+):
 
     try:
 
@@ -1217,10 +1232,6 @@ def venue_detail(venue_name: str):
             venue_df["wicket"].sum()
         )
 
-        # ----------------------------------------------------
-        # TEAM PERFORMANCE
-        # ----------------------------------------------------
-
         team_performance = []
 
         grouped = (
@@ -1251,10 +1262,6 @@ def venue_detail(venue_name: str):
                     "matches": team_matches,
                 }
             )
-
-        # ----------------------------------------------------
-        # SEASON PERFORMANCE
-        # ----------------------------------------------------
 
         season_stats = []
 
@@ -1395,7 +1402,9 @@ def matches():
 # ============================================================
 
 @app.get("/api/match/{match_id}")
-def match_detail(match_id: str):
+def match_detail(
+    match_id: str
+):
 
     try:
 
@@ -1445,7 +1454,9 @@ def player_form(
 # ============================================================
 
 @app.get("/api/player/{player_name}/season")
-def player_season(player_name: str):
+def player_season(
+    player_name: str
+):
 
     try:
 
@@ -1529,33 +1540,437 @@ def seasons():
 
 
 # ============================================================
-# AI ANALYST
+# AI CONTEXT BUILDER
 # ============================================================
+
+def build_ai_context(
+    question: str
+):
+
+    q = question.lower()
+
+    context = {
+        "overview": analytics.overview()
+    }
+
+    # --------------------------------------------------------
+    # PLAYER DETECTION
+    # --------------------------------------------------------
+
+    player_names = []
+
+    if "batter" in df.columns:
+
+        player_names.extend(
+            df["batter"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    if "bowler" in df.columns:
+
+        player_names.extend(
+            df["bowler"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    player_names = list(
+        dict.fromkeys(player_names)
+    )
+
+    detected_player = None
+
+    # Prefer longest names first
+    for player in sorted(
+        player_names,
+        key=len,
+        reverse=True
+    ):
+
+        if player.lower() in q:
+
+            detected_player = player
+            break
+
+    if detected_player:
+
+        try:
+
+            context["player"] = {
+                "name": detected_player,
+
+                "profile": analytics.player_profile(
+                    detected_player
+                ),
+
+                "dna": analytics.player_dna(
+                    detected_player
+                ),
+
+                "context_score": analytics.context_score(
+                    detected_player
+                ),
+
+                "phase_stats": analytics.phase_stats(
+                    detected_player
+                ),
+
+                "similar_players": analytics.similar_players(
+                    detected_player
+                ),
+
+                "recent_form": match_analytics.player_form(
+                    detected_player
+                ),
+
+                "season_stats": match_analytics.season_stats(
+                    detected_player
+                ),
+            }
+
+        except Exception as error:
+
+            context["player_error"] = str(error)
+
+    # --------------------------------------------------------
+    # TEAM DETECTION
+    # --------------------------------------------------------
+
+    teams_available = set()
+
+    for column in [
+        "team_1",
+        "team_2",
+        "batting_team",
+        "bowling_team",
+    ]:
+
+        if column in matches_df.columns:
+
+            teams_available.update(
+                matches_df[column]
+                .dropna()
+                .astype(str)
+                .tolist()
+            )
+
+        elif column in df.columns:
+
+            teams_available.update(
+                df[column]
+                .dropna()
+                .astype(str)
+                .tolist()
+            )
+
+    detected_teams = []
+
+    for team in sorted(
+        teams_available,
+        key=len,
+        reverse=True
+    ):
+
+        if team.lower() in q:
+
+            detected_teams.append(team)
+
+    if detected_teams:
+
+        context["teams"] = {}
+
+        for team in detected_teams[:2]:
+
+            try:
+
+                actual_team = find_team(team)
+
+                if actual_team:
+
+                    context["teams"][actual_team] = (
+                        team_detail(actual_team)
+                    )
+
+            except Exception as error:
+
+                context["teams"][team] = {
+                    "error": str(error)
+                }
+
+    # --------------------------------------------------------
+    # VENUE DETECTION
+    # --------------------------------------------------------
+
+    venue_names = []
+
+    if "venue" in df.columns:
+
+        venue_names = (
+            df["venue"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+    detected_venue = None
+
+    for venue in sorted(
+        venue_names,
+        key=len,
+        reverse=True
+    ):
+
+        if venue.lower() in q:
+
+            detected_venue = venue
+            break
+
+    if detected_venue:
+
+        try:
+
+            context["venue"] = venue_detail(
+                detected_venue
+            )
+
+        except Exception as error:
+
+            context["venue_error"] = str(error)
+
+    # --------------------------------------------------------
+    # MATCHUP DETECTION
+    # --------------------------------------------------------
+
+    matchup_keywords = [
+        "against",
+        " vs ",
+        "versus",
+        "matchup",
+        "match-up",
+    ]
+
+    is_matchup_question = any(
+        keyword in q
+        for keyword in matchup_keywords
+    )
+
+    if is_matchup_question:
+
+        detected_batter = None
+        detected_bowler = None
+
+        batter_names = []
+
+        if "batter" in df.columns:
+
+            batter_names = (
+                df["batter"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+        bowler_names = []
+
+        if "bowler" in df.columns:
+
+            bowler_names = (
+                df["bowler"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+        for player in sorted(
+            batter_names,
+            key=len,
+            reverse=True
+        ):
+
+            if player.lower() in q:
+
+                detected_batter = player
+                break
+
+        for bowler in sorted(
+            bowler_names,
+            key=len,
+            reverse=True
+        ):
+
+            if bowler.lower() in q:
+
+                detected_bowler = bowler
+                break
+
+        if detected_batter and detected_bowler:
+
+            try:
+
+                context["matchup"] = (
+                    match_analytics.matchup(
+                        detected_batter,
+                        detected_bowler
+                    )
+                )
+
+                context["matchup_players"] = {
+                    "batter": detected_batter,
+                    "bowler": detected_bowler,
+                }
+
+            except Exception as error:
+
+                context["matchup_error"] = str(error)
+
+    # --------------------------------------------------------
+    # MATCH QUESTIONS
+    # --------------------------------------------------------
+
+    match_keywords = [
+        "match",
+        "scorecard",
+        "score",
+        "innings",
+        "game",
+    ]
+
+    if any(
+        keyword in q
+        for keyword in match_keywords
+    ):
+
+        try:
+
+            # Limit to recent/available match list
+            # instead of dumping the complete dataset.
+            recent_matches = (
+                match_analytics.match_list()
+            )
+
+            if isinstance(
+                recent_matches,
+                list
+            ):
+
+                recent_matches = recent_matches[-20:]
+
+            context["recent_matches"] = (
+                recent_matches
+            )
+
+        except Exception as error:
+
+            context["match_error"] = str(error)
+
+    # --------------------------------------------------------
+    # IMPACT ANALYSIS
+    # --------------------------------------------------------
+
+    if any(
+        keyword in q
+        for keyword in [
+            "impact",
+            "impactful",
+            "most impactful",
+        ]
+    ):
+
+        try:
+
+            context["impact_analysis"] = (
+                analytics.impact()
+            )
+
+        except Exception as error:
+
+            context["impact_error"] = str(error)
+
+    # --------------------------------------------------------
+    # ANOMALIES
+    # --------------------------------------------------------
+
+    if any(
+        keyword in q
+        for keyword in [
+            "anomal",
+            "unusual",
+            "outlier",
+            "surprising",
+        ]
+    ):
+
+        try:
+
+            context["anomalies"] = (
+                analytics.anomalies()
+            )
+
+        except Exception as error:
+
+            context["anomalies_error"] = str(error)
+
+    # --------------------------------------------------------
+    # ARCHETYPES
+    # --------------------------------------------------------
+
+    if any(
+        keyword in q
+        for keyword in [
+            "archetype",
+            "player type",
+            "player types",
+        ]
+    ):
+
+        try:
+
+            context["archetypes"] = (
+                analytics.archetypes()
+            )
+
+        except Exception as error:
+
+            context["archetypes_error"] = str(error)
+
+    return clean_for_json(context)
+
+
 # ============================================================
 # AI ANALYST
 # ============================================================
 
 @app.post("/api/ai/chat")
-def ai_chat(request: AIQuestion):
+def ai_chat(
+    request: AIQuestion
+):
 
     try:
 
         question = request.question.strip()
 
         if not question:
+
             raise HTTPException(
                 status_code=400,
-                detail="Question cannot be empty."
+                detail="Question cannot be empty.",
             )
 
-        # Get current SportsIQ analytics context
-        overview_data = analytics.overview()
+        # Build relevant SportsIQ context
+        context = build_ai_context(
+            question
+        )
 
-        context = {
-            "overview": overview_data
-        }
-
-        # Send question + analytics context to Gemini
+        # Send question + analytics
+        # context to Gemini
         answer = ai_analyst.ask(
             question,
             context
@@ -1564,7 +1979,7 @@ def ai_chat(request: AIQuestion):
         return clean_for_json(
             {
                 "question": question,
-                "answer": answer
+                "answer": answer,
             }
         )
 
@@ -1575,9 +1990,10 @@ def ai_chat(request: AIQuestion):
 
         raise HTTPException(
             status_code=500,
-            detail=str(error)
+            detail=str(error),
         )
-        
+
+
 # ============================================================
 # STATIC FRONTEND
 # ============================================================
