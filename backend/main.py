@@ -1531,6 +1531,9 @@ def seasons():
 # ============================================================
 # AI ANALYST
 # ============================================================
+# ============================================================
+# AI ANALYST
+# ============================================================
 
 @app.post("/api/ai/chat")
 def ai_chat(request: AIQuestion):
@@ -1540,20 +1543,28 @@ def ai_chat(request: AIQuestion):
         question = request.question.strip()
 
         if not question:
-
             raise HTTPException(
                 status_code=400,
-                detail="Question cannot be empty.",
+                detail="Question cannot be empty."
             )
 
+        # Get current SportsIQ analytics context
+        overview_data = analytics.overview()
+
+        context = {
+            "overview": overview_data
+        }
+
+        # Send question + analytics context to Gemini
         answer = ai_analyst.ask(
-            question
+            question,
+            context
         )
 
         return clean_for_json(
             {
                 "question": question,
-                "answer": answer,
+                "answer": answer
             }
         )
 
@@ -1564,10 +1575,9 @@ def ai_chat(request: AIQuestion):
 
         raise HTTPException(
             status_code=500,
-            detail=str(error),
+            detail=str(error)
         )
-
-
+        
 # ============================================================
 # STATIC FRONTEND
 # ============================================================
