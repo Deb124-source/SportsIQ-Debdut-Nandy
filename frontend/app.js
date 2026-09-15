@@ -2,10 +2,11 @@ const API_BASE = "https://sportsiq-backend-i3sr.onrender.com/api";
 
 let charts = {};
 let currentPlayer = null;
+let playersCache = [];
 
 
 /* =========================================================
-   BASIC HELPERS
+   HELPERS
 ========================================================= */
 
 function $(id) {
@@ -13,8 +14,21 @@ function $(id) {
 }
 
 
+function firstDefined(...values) {
+    for (const value of values) {
+        if (value !== undefined && value !== null && value !== "") {
+            return value;
+        }
+    }
+
+    return undefined;
+}
+
+
 function escapeHTML(value) {
-    if (value === null || value === undefined) return "";
+    if (value === null || value === undefined) {
+        return "";
+    }
 
     return String(value)
         .replace(/&/g, "&amp;")
@@ -29,15 +43,79 @@ function setText(id, value, fallback = "—") {
     const element = $(id);
 
     if (!element) {
-        console.warn(`Element not found: #${id}`);
+        console.warn(`SportsIQ: element #${id} not found`);
         return;
     }
 
-    if (value === null || value === undefined || value === "") {
+    if (
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
         element.textContent = fallback;
     } else {
-        element.textContent = value;
+        element.textContent = String(value);
     }
+}
+
+
+function show(id) {
+    const element = $(id);
+
+    if (element) {
+        element.classList.remove("hidden");
+    }
+}
+
+
+function hide(id) {
+    const element = $(id);
+
+    if (element) {
+        element.classList.add("hidden");
+    }
+}
+
+
+function normaliseList(data, keys = []) {
+    if (Array.isArray(data)) {
+        return data;
+    }
+
+    if (!data || typeof data !== "object") {
+        return [];
+    }
+
+    for (const key of keys) {
+        if (Array.isArray(data[key])) {
+            return data[key];
+        }
+    }
+
+    if (Array.isArray(data.data)) {
+        return data.data;
+    }
+
+    return [];
+}
+
+
+function formatNumber(value) {
+    if (
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
+        return "—";
+    }
+
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return String(value);
+    }
+
+    return number.toLocaleString("en-IN");
 }
 
 
@@ -51,48 +129,69 @@ async function apiFetch(endpoint, options = {}) {
 
     console.log("SportsIQ API REQUEST:", url);
 
+    const fetchOptions = {
+        ...options,
+        headers: {
+            ...(options.body
+                ? {
+                    "Content-Type": "application/json"
+                }
+                : {}),
+            ...(options.headers || {})
+        }
+    };
+
     try {
 
-        const response = await fetch(url, {
-            ...options,
-            headers: {
-                "Content-Type": "application/json",
-                ...(options.headers || {})
-            }
-        });
-
-        console.log(
-            "SportsIQ API RESPONSE:",
-            endpoint,
-            response.status
+        const response = await fetch(
+            url,
+            fetchOptions
         );
 
         const text = await response.text();
 
-        let data;
+        let data = {};
 
-        try {
-            data = text ? JSON.parse(text) : {};
-        } catch {
-            data = {
-                raw: text
-            };
+        if (text) {
+
+            try {
+                data = JSON.parse(text);
+            } catch (parseError) {
+
+                console.warn(
+                    "SportsIQ: response was not JSON",
+                    parseError
+                );
+
+                data = {
+                    raw: text
+                };
+            }
         }
+
+
+        console.log(
+            "SportsIQ API RESPONSE:",
+            endpoint,
+            response.status,
+            data
+        );
+
 
         if (!response.ok) {
 
-            console.error(
-                "SportsIQ API ERROR:",
-                endpoint,
-                data
+            const message = firstDefined(
+                data.detail,
+                data.message,
+                data.error,
+                `API request failed (${response.status})`
             );
 
             throw new Error(
-                data.detail ||
-                data.message ||
-                `API request failed (${response.status})`
+                String(message)
             );
         }
+
 
         return data;
 
@@ -115,28 +214,31 @@ async function apiFetch(endpoint, options = {}) {
 
 function setupNavigation() {
 
-    const buttons = document.querySelectorAll(
-        ".nav-item[data-section], .feature-card[data-section]"
-    );
+    const buttons =
+        document.querySelectorAll(
+            ".nav-item[data-section], .feature-card[data-section]"
+        );
+
 
     console.log(
         "SportsIQ navigation buttons:",
         buttons.length
     );
 
+
     buttons.forEach(button => {
 
-        button.addEventListener("click", () => {
+        button.addEventListener(
+            "click",
+            event => {
 
-            const section = button.dataset.section;
+                event.preventDefault();
 
-            console.log(
-                "SportsIQ navigation:",
-                section
-            );
-
-            showSection(section);
-        });
+                showSection(
+                    button.dataset.section
+                );
+            }
+        );
     });
 }
 
@@ -148,34 +250,38 @@ function showSection(sectionName) {
         sectionName
     );
 
-    const sections = document.querySelectorAll(
-        ".page-section"
-    );
 
-    sections.forEach(section => {
-        section.classList.remove("active");
-        section.style.display = "none";
-    });
+    const target =
+        $(`${sectionName}-section`);
 
-
-    const target = $(`${sectionName}-section`);
 
     if (!target) {
 
         console.error(
-            `Section not found: ${sectionName}-section`
+            `SportsIQ: section not found: ${sectionName}-section`
         );
 
         return;
     }
 
 
+    document
+        .querySelectorAll(".page-section")
+        .forEach(section => {
+
+            section.classList.remove("active");
+            section.style.display = "none";
+        });
+
+
     target.classList.add("active");
-    target.style.display = "";
+    target.style.display = "block";
 
 
     document
-        .querySelectorAll(".nav-item[data-section]")
+        .querySelectorAll(
+            ".nav-item[data-section]"
+        )
         .forEach(button => {
 
             button.classList.toggle(
@@ -186,12 +292,24 @@ function showSection(sectionName) {
 
 
     const titles = {
-        dashboard: "Dashboard",
-        players: "Player Intelligence",
-        matches: "Match Intelligence",
-        teams: "Teams",
-        venues: "Venues",
-        ai: "AI Analyst"
+
+        dashboard:
+            "Dashboard",
+
+        players:
+            "Player Intelligence",
+
+        matches:
+            "Match Intelligence",
+
+        teams:
+            "Teams",
+
+        venues:
+            "Venues",
+
+        ai:
+            "AI Analyst"
     };
 
 
@@ -201,20 +319,22 @@ function showSection(sectionName) {
     );
 
 
-    /* Load section data */
-
     if (sectionName === "players") {
         loadPlayers();
     }
 
+
     if (sectionName === "matches") {
+
         loadMatches();
         loadSeasons();
     }
 
+
     if (sectionName === "teams") {
         loadTeams();
     }
+
 
     if (sectionName === "venues") {
         loadVenues();
@@ -230,12 +350,17 @@ async function loadHealth() {
 
     try {
 
-        const data = await apiFetch("/health");
+        const data =
+            await apiFetch("/health");
+
 
         console.log(
             "SportsIQ HEALTH:",
             data
         );
+
+
+        return data;
 
     } catch (error) {
 
@@ -243,6 +368,8 @@ async function loadHealth() {
             "Health check failed:",
             error
         );
+
+        return null;
     }
 }
 
@@ -255,7 +382,9 @@ async function loadOverview() {
 
     try {
 
-        const data = await apiFetch("/overview");
+        const data =
+            await apiFetch("/overview");
+
 
         console.log(
             "SportsIQ OVERVIEW DATA:",
@@ -263,61 +392,88 @@ async function loadOverview() {
         );
 
 
-        /*
-         * Support both:
-         *
-         * {
-         *   matches: ...,
-         *   deliveries: ...,
-         *   players: ...,
-         *   teams: ...
-         * }
-         *
-         * and:
-         *
-         * {
-         *   overview: {
-         *      matches: ...
-         *   }
-         * }
-         */
+        let overview = data;
 
-        const overview =
-            data.overview ||
-            data.data ||
-            data;
+
+        if (
+            data &&
+            typeof data.overview === "object" &&
+            !Array.isArray(data.overview)
+        ) {
+
+            overview = data.overview;
+
+        } else if (
+            data &&
+            typeof data.data === "object" &&
+            !Array.isArray(data.data)
+        ) {
+
+            overview = data.data;
+        }
+
+
+        const matches =
+            firstDefined(
+                overview.matches,
+                overview.total_matches,
+                overview.match_count,
+                overview.matches_count
+            );
+
+
+        const deliveries =
+            firstDefined(
+                overview.deliveries,
+                overview.total_deliveries,
+                overview.delivery_count,
+                overview.deliveries_count
+            );
+
+
+        const players =
+            firstDefined(
+                overview.players,
+                overview.total_players,
+                overview.player_count,
+                overview.players_count
+            );
+
+
+        const teams =
+            firstDefined(
+                overview.teams,
+                overview.total_teams,
+                overview.team_count,
+                overview.teams_count
+            );
 
 
         setText(
             "kpi-matches",
-            overview.matches ??
-            overview.total_matches ??
-            overview.match_count
+            formatNumber(matches)
         );
 
 
         setText(
             "kpi-deliveries",
-            overview.deliveries ??
-            overview.total_deliveries ??
-            overview.delivery_count
+            formatNumber(deliveries)
         );
 
 
         setText(
             "kpi-players",
-            overview.players ??
-            overview.total_players ??
-            overview.player_count
+            formatNumber(players)
         );
 
 
         setText(
             "kpi-teams",
-            overview.teams ??
-            overview.total_teams ??
-            overview.team_count
+            formatNumber(teams)
         );
+
+
+        return data;
 
     } catch (error) {
 
@@ -326,10 +482,7 @@ async function loadOverview() {
             error
         );
 
-        setText("kpi-matches", "—");
-        setText("kpi-deliveries", "—");
-        setText("kpi-players", "—");
-        setText("kpi-teams", "—");
+        return null;
     }
 }
 
@@ -338,16 +491,46 @@ async function loadOverview() {
    PLAYERS
 ========================================================= */
 
+function playerNameFromItem(player) {
+
+    if (typeof player === "string") {
+        return player;
+    }
+
+
+    if (
+        !player ||
+        typeof player !== "object"
+    ) {
+        return null;
+    }
+
+
+    return firstDefined(
+        player.name,
+        player.player_name,
+        player.Player,
+        player.player
+    );
+}
+
+
 async function loadPlayers() {
 
-    const select = $("player-select");
+    const select =
+        $("player-select");
 
-    if (!select) return;
+
+    if (!select) {
+        return;
+    }
 
 
     try {
 
-        const data = await apiFetch("/players");
+        const data =
+            await apiFetch("/players");
+
 
         console.log(
             "SportsIQ PLAYERS:",
@@ -355,32 +538,25 @@ async function loadPlayers() {
         );
 
 
-        let players =
-            Array.isArray(data)
-                ? data
-                : (
-                    data.players ||
-                    data.data ||
-                    []
-                );
-
-
-        players = players.map(player => {
-
-            if (typeof player === "string") {
-                return player;
-            }
-
-            return (
-                player.name ||
-                player.player_name ||
-                player.Player ||
-                player.player
+        const rawPlayers =
+            normaliseList(
+                data,
+                ["players"]
             );
-        }).filter(Boolean);
 
 
-        players.sort();
+        playersCache =
+            rawPlayers
+                .map(playerNameFromItem)
+                .filter(Boolean)
+                .filter(
+                    (value, index, array) =>
+                        array.indexOf(value) === index
+                )
+                .sort(
+                    (a, b) =>
+                        a.localeCompare(b)
+                );
 
 
         select.innerHTML = "";
@@ -389,44 +565,50 @@ async function loadPlayers() {
         const defaultOption =
             document.createElement("option");
 
+
         defaultOption.value = "";
         defaultOption.textContent =
             "Select a player";
 
-        select.appendChild(defaultOption);
+
+        select.appendChild(
+            defaultOption
+        );
 
 
-        players.forEach(player => {
+        playersCache.forEach(player => {
 
             const option =
                 document.createElement("option");
 
+
             option.value = player;
             option.textContent = player;
 
-            select.appendChild(option);
+
+            select.appendChild(
+                option
+            );
         });
 
 
-        console.log(
-            `Loaded ${players.length} players`
-        );
-
-
-        /* Matchup selectors */
-
         populatePlayerSelect(
             "matchup-batter",
-            players,
+            playersCache,
             "Select batter"
         );
 
+
         populatePlayerSelect(
             "matchup-bowler",
-            players,
+            playersCache,
             "Select bowler"
         );
 
+
+        console.log(
+            `SportsIQ: loaded ${playersCache.length} players`
+        );
 
     } catch (error) {
 
@@ -435,8 +617,22 @@ async function loadPlayers() {
             error
         );
 
-        select.innerHTML =
-            `<option value="">Unable to load players</option>`;
+
+        select.innerHTML = "";
+
+
+        const option =
+            document.createElement("option");
+
+
+        option.value = "";
+        option.textContent =
+            "Unable to load players";
+
+
+        select.appendChild(
+            option
+        );
     }
 }
 
@@ -449,15 +645,22 @@ function populatePlayerSelect(
 
     const select = $(id);
 
-    if (!select) return;
+
+    if (!select) {
+        return;
+    }
+
 
     select.innerHTML = "";
+
 
     const first =
         document.createElement("option");
 
+
     first.value = "";
     first.textContent = placeholder;
+
 
     select.appendChild(first);
 
@@ -467,8 +670,10 @@ function populatePlayerSelect(
         const option =
             document.createElement("option");
 
+
         option.value = player;
         option.textContent = player;
+
 
         select.appendChild(option);
     });
@@ -476,16 +681,18 @@ function populatePlayerSelect(
 
 
 /* =========================================================
-   PLAYER ANALYSIS
+   PLAYER CONTROLS
 ========================================================= */
 
 function setupPlayerControls() {
 
-    const button = $("load-player-btn");
+    const loadButton =
+        $("load-player-btn");
 
-    if (button) {
 
-        button.addEventListener(
+    if (loadButton) {
+
+        loadButton.addEventListener(
             "click",
             loadSelectedPlayer
         );
@@ -495,17 +702,18 @@ function setupPlayerControls() {
     const backButton =
         $("back-player-btn");
 
+
     if (backButton) {
 
         backButton.addEventListener(
             "click",
             () => {
 
-                $("player-dashboard")
-                    ?.classList.add("hidden");
+                hide("player-dashboard");
 
-                $("player-selector-view")
-                    ?.classList.remove("hidden");
+                show("player-selector-view");
+
+                hide("player-error");
             }
         );
     }
@@ -514,15 +722,15 @@ function setupPlayerControls() {
 
 async function loadSelectedPlayer() {
 
-    const select = $("player-select");
-
     const player =
-        select?.value;
+        $("player-select")?.value;
 
 
     if (!player) {
 
-        alert("Please select a player.");
+        alert(
+            "Please select a player."
+        );
 
         return;
     }
@@ -537,20 +745,11 @@ async function loadPlayer(player) {
     currentPlayer = player;
 
 
-    $("player-selector-view")
-        ?.classList.add("hidden");
+    hide("player-selector-view");
+    hide("player-dashboard");
+    hide("player-error");
 
-
-    $("player-dashboard")
-        ?.classList.add("hidden");
-
-
-    $("player-loading")
-        ?.classList.remove("hidden");
-
-
-    $("player-error")
-        ?.classList.add("hidden");
+    show("player-loading");
 
 
     try {
@@ -562,7 +761,7 @@ async function loadPlayer(player) {
 
 
         console.log(
-            "PLAYER DETAIL:",
+            "SportsIQ PLAYER DETAIL:",
             data
         );
 
@@ -570,8 +769,18 @@ async function loadPlayer(player) {
         renderPlayer(data);
 
 
-        $("player-dashboard")
-            ?.classList.remove("hidden");
+        /*
+         * Extra player endpoints are loaded
+         * independently. A failure in one of them
+         * must NOT break the main player page.
+         */
+
+        await loadPlayerExtras(
+            player
+        );
+
+
+        show("player-dashboard");
 
     } catch (error) {
 
@@ -584,18 +793,23 @@ async function loadPlayer(player) {
         const errorBox =
             $("player-error");
 
+
         if (errorBox) {
 
             errorBox.textContent =
                 error.message;
 
-            errorBox.classList.remove("hidden");
+            errorBox.classList.remove(
+                "hidden"
+            );
         }
+
+
+        show("player-selector-view");
 
     } finally {
 
-        $("player-loading")
-            ?.classList.add("hidden");
+        hide("player-loading");
     }
 }
 
@@ -603,54 +817,70 @@ async function loadPlayer(player) {
 function renderPlayer(data) {
 
     const player =
-        data.player ||
-        data;
+        data &&
+        typeof data.player === "object"
+            ? data.player
+            : data || {};
+
+
+    const name =
+        firstDefined(
+            player.name,
+            player.player_name,
+            player.Player,
+            currentPlayer
+        );
 
 
     setText(
         "player-name",
-        player.name ||
-        player.player_name ||
-        currentPlayer
+        name
     );
 
 
     setText(
         "player-initial",
-        (
-            player.name ||
-            player.player_name ||
-            currentPlayer ||
-            "P"
-        ).charAt(0).toUpperCase()
+        name
+            ? String(name)
+                .charAt(0)
+                .toUpperCase()
+            : "P"
     );
 
 
     setText(
         "player-runs",
-        player.runs ??
-        player.total_runs
+        firstDefined(
+            player.runs,
+            player.total_runs
+        )
     );
 
 
     setText(
         "player-average",
-        player.average ??
-        player.batting_average
+        firstDefined(
+            player.average,
+            player.batting_average
+        )
     );
 
 
     setText(
         "player-strike-rate",
-        player.strike_rate ??
-        player.strikeRate
+        firstDefined(
+            player.strike_rate,
+            player.strikeRate
+        )
     );
 
 
     setText(
         "player-wickets",
-        player.wickets ??
-        player.total_wickets
+        firstDefined(
+            player.wickets,
+            player.total_wickets
+        )
     );
 
 
@@ -662,9 +892,855 @@ function renderPlayer(data) {
 
     setText(
         "player-matches",
-        player.matches ??
-        player.total_matches
+        firstDefined(
+            player.matches,
+            player.total_matches
+        )
     );
+
+
+    setText(
+        "player-dna",
+        firstDefined(
+            player.dna,
+            player.archetype,
+            "Player DNA"
+        )
+    );
+}
+
+
+/* =========================================================
+   PLAYER EXTRA ANALYTICS
+========================================================= */
+
+async function loadPlayerExtras(player) {
+
+    const results =
+        await Promise.allSettled([
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/dna`
+            ),
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/context-score`
+            ),
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/phases`
+            ),
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/form`
+            ),
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/season`
+            ),
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/similar`
+            ),
+
+            apiFetch(
+                `/player/${encodeURIComponent(player)}/intelligence`
+            )
+        ]);
+
+
+    const dna =
+        results[0];
+
+    const context =
+        results[1];
+
+    const phases =
+        results[2];
+
+    const form =
+        results[3];
+
+    const season =
+        results[4];
+
+    const similar =
+        results[5];
+
+    const intelligence =
+        results[6];
+
+
+    if (dna.status === "fulfilled") {
+        renderDNA(dna.value);
+    }
+
+
+    if (context.status === "fulfilled") {
+        renderContextScore(
+            context.value
+        );
+    }
+
+
+    if (phases.status === "fulfilled") {
+        renderPhases(
+            phases.value
+        );
+    }
+
+
+    if (form.status === "fulfilled") {
+        renderForm(
+            form.value
+        );
+    }
+
+
+    if (season.status === "fulfilled") {
+        renderSeason(
+            season.value
+        );
+    }
+
+
+    if (similar.status === "fulfilled") {
+        renderSimilar(
+            similar.value
+        );
+    }
+
+
+    if (
+        intelligence.status ===
+        "fulfilled"
+    ) {
+
+        renderIntelligence(
+            intelligence.value
+        );
+    }
+}
+
+
+/* =========================================================
+   PLAYER DNA
+========================================================= */
+
+function renderDNA(data) {
+
+    let source = data;
+
+
+    if (
+        data &&
+        typeof data.dna === "object"
+    ) {
+
+        source = data.dna;
+
+    } else if (
+        data &&
+        typeof data.data === "object"
+    ) {
+
+        source = data.data;
+    }
+
+
+    source = source || {};
+
+
+    setText(
+        "dna-score",
+        firstDefined(
+            source.score,
+            source.dna_score
+        )
+    );
+
+
+    setText(
+        "dna-archetype",
+        firstDefined(
+            source.archetype,
+            source.type,
+            source.label
+        )
+    );
+
+
+    setText(
+        "dna-description",
+        firstDefined(
+            source.description,
+            source.summary,
+            "Player statistical DNA."
+        )
+    );
+
+
+    const tags =
+        firstDefined(
+            source.tags,
+            source.labels,
+            []
+        );
+
+
+    const container =
+        $("dna-tags");
+
+
+    if (!container) {
+        return;
+    }
+
+
+    container.innerHTML = "";
+
+
+    if (Array.isArray(tags)) {
+
+        tags.forEach(tag => {
+
+            const span =
+                document.createElement("span");
+
+
+            span.className = "tag";
+
+            span.textContent =
+                tag;
+
+
+            container.appendChild(
+                span
+            );
+        });
+    }
+}
+
+
+/* =========================================================
+   CONTEXT SCORE
+========================================================= */
+
+function renderContextScore(data) {
+
+    let source = data;
+
+
+    if (
+        data &&
+        typeof data.context_score === "object"
+    ) {
+
+        source =
+            data.context_score;
+
+    } else if (
+        data &&
+        typeof data.data === "object"
+    ) {
+
+        source =
+            data.data;
+    }
+
+
+    source =
+        source || {};
+
+
+    const score =
+        firstDefined(
+            source.score,
+            source.context_score,
+            source.value
+        );
+
+
+    setText(
+        "context-score",
+        score
+    );
+
+
+    setText(
+        "mini-context-score",
+        score
+    );
+
+
+    const fill =
+        $("context-score-fill");
+
+
+    const numericScore =
+        Number(score);
+
+
+    if (
+        fill &&
+        Number.isFinite(numericScore)
+    ) {
+
+        const percentage =
+            Math.max(
+                0,
+                Math.min(
+                    100,
+                    numericScore
+                )
+            );
+
+
+        fill.style.width =
+            `${percentage}%`;
+    }
+
+
+    setText(
+        "context-summary",
+        firstDefined(
+            source.summary,
+            source.description,
+            source.interpretation,
+            "Context score calculated by SportsIQ."
+        )
+    );
+}
+
+
+/* =========================================================
+   PHASE ANALYSIS
+========================================================= */
+
+function renderPhases(data) {
+
+    let source = data;
+
+
+    if (
+        data &&
+        typeof data.phases === "object"
+    ) {
+
+        source =
+            data.phases;
+
+    } else if (
+        data &&
+        typeof data.data === "object"
+    ) {
+
+        source =
+            data.data;
+    }
+
+
+    source =
+        source || {};
+
+
+    const powerplay =
+        source.powerplay ||
+        source.Powerplay ||
+        {};
+
+
+    const middle =
+        source.middle ||
+        source.middle_overs ||
+        source.Middle ||
+        {};
+
+
+    const death =
+        source.death ||
+        source.death_overs ||
+        source.Death ||
+        {};
+
+
+    renderPhaseCard(
+        powerplay,
+        "powerplay-runs",
+        "powerplay-sr",
+        "powerplay-fill"
+    );
+
+
+    renderPhaseCard(
+        middle,
+        "middle-runs",
+        "middle-sr",
+        "middle-fill"
+    );
+
+
+    renderPhaseCard(
+        death,
+        "death-runs",
+        "death-sr",
+        "death-fill"
+    );
+}
+
+
+function renderPhaseCard(
+    data,
+    runsId,
+    srId,
+    fillId
+) {
+
+    data =
+        data || {};
+
+
+    const runs =
+        firstDefined(
+            data.runs,
+            data.total_runs
+        );
+
+
+    const strikeRate =
+        firstDefined(
+            data.strike_rate,
+            data.sr,
+            data.strikeRate
+        );
+
+
+    setText(
+        runsId,
+        runs
+    );
+
+
+    setText(
+        srId,
+        strikeRate
+    );
+
+
+    const fill =
+        $(fillId);
+
+
+    const numericRuns =
+        Number(runs);
+
+
+    if (
+        fill &&
+        Number.isFinite(numericRuns)
+    ) {
+
+        const width =
+            Math.max(
+                0,
+                Math.min(
+                    100,
+                    numericRuns / 5
+                )
+            );
+
+
+        fill.style.width =
+            `${width}%`;
+    }
+}
+
+
+/* =========================================================
+   RECENT FORM
+========================================================= */
+
+function renderForm(data) {
+
+    const container =
+        $("form-container");
+
+
+    if (!container) {
+        return;
+    }
+
+
+    const items =
+        normaliseList(
+            data,
+            [
+                "form",
+                "matches",
+                "recent_form"
+            ]
+        );
+
+
+    container.innerHTML = "";
+
+
+    if (!items.length) {
+
+        container.innerHTML =
+            `<div class="loading-state">
+                No recent form data available.
+            </div>`;
+
+        return;
+    }
+
+
+    items.forEach(item => {
+
+        const card =
+            document.createElement("div");
+
+
+        card.className =
+            "phase-card";
+
+
+        const runs =
+            firstDefined(
+                item.runs,
+                item.batter_runs,
+                item.score
+            );
+
+
+        const date =
+            firstDefined(
+                item.date,
+                item.match_date,
+                item.season
+            );
+
+
+        const strikeRate =
+            firstDefined(
+                item.strike_rate,
+                item.sr,
+                "—"
+            );
+
+
+        card.innerHTML = `
+
+            <div class="phase-top">
+
+                <span>
+                    ${escapeHTML(
+                        date || "Match"
+                    )}
+                </span>
+
+                <span>
+                    ${escapeHTML(
+                        strikeRate
+                    )}
+                </span>
+
+            </div>
+
+            <strong>
+                ${escapeHTML(
+                    runs ?? "—"
+                )}
+            </strong>
+
+            <small>
+                Runs
+            </small>
+        `;
+
+
+        container.appendChild(
+            card
+        );
+    });
+}
+
+
+/* =========================================================
+   SEASON ANALYSIS
+========================================================= */
+
+function renderSeason(data) {
+
+    const tbody =
+        $("season-table");
+
+
+    if (!tbody) {
+        return;
+    }
+
+
+    const seasons =
+        normaliseList(
+            data,
+            [
+                "season",
+                "seasons",
+                "data"
+            ]
+        );
+
+
+    tbody.innerHTML = "";
+
+
+    if (!seasons.length) {
+
+        tbody.innerHTML = `
+
+            <tr>
+
+                <td colspan="7">
+                    No season statistics available.
+                </td>
+
+            </tr>
+        `;
+
+        return;
+    }
+
+
+    seasons.forEach(item => {
+
+        const row =
+            document.createElement("tr");
+
+
+        row.innerHTML = `
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.season,
+                        "—"
+                    )
+                )}
+            </td>
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.matches,
+                        item.total_matches,
+                        "—"
+                    )
+                )}
+            </td>
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.runs,
+                        item.total_runs,
+                        "—"
+                    )
+                )}
+            </td>
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.average,
+                        item.batting_average,
+                        "—"
+                    )
+                )}
+            </td>
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.strike_rate,
+                        item.strikeRate,
+                        "—"
+                    )
+                )}
+            </td>
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.wickets,
+                        item.total_wickets,
+                        "—"
+                    )
+                )}
+            </td>
+
+            <td>
+                ${escapeHTML(
+                    firstDefined(
+                        item.economy,
+                        "—"
+                    )
+                )}
+            </td>
+        `;
+
+
+        tbody.appendChild(
+            row
+        );
+    });
+}
+
+
+/* =========================================================
+   SIMILAR PLAYERS
+========================================================= */
+
+function renderSimilar(data) {
+
+    const container =
+        $("similar-players");
+
+
+    if (!container) {
+        return;
+    }
+
+
+    const items =
+        normaliseList(
+            data,
+            [
+                "similar",
+                "players",
+                "data"
+            ]
+        );
+
+
+    container.innerHTML = "";
+
+
+    if (!items.length) {
+
+        container.innerHTML =
+            `<div class="loading-state">
+                No similar players available.
+            </div>`;
+
+        return;
+    }
+
+
+    items.forEach(item => {
+
+        const name =
+            playerNameFromItem(item) ||
+            "Unknown player";
+
+
+        let score;
+
+
+        if (
+            item &&
+            typeof item === "object"
+        ) {
+
+            score =
+                firstDefined(
+                    item.similarity,
+                    item.score
+                );
+        }
+
+
+        const card =
+            document.createElement("div");
+
+
+        card.className =
+            "feature-card";
+
+
+        card.innerHTML = `
+
+            <div class="feature-icon">
+                ◉
+            </div>
+
+            <div>
+
+                <h3>
+                    ${escapeHTML(name)}
+                </h3>
+
+                <p>
+                    Similarity:
+                    ${escapeHTML(
+                        score ?? "—"
+                    )}
+                </p>
+
+            </div>
+        `;
+
+
+        container.appendChild(
+            card
+        );
+    });
+}
+
+
+/* =========================================================
+   PLAYER INTELLIGENCE
+========================================================= */
+
+function renderIntelligence(data) {
+
+    if (
+        !data ||
+        typeof data !== "object"
+    ) {
+        return;
+    }
+
+
+    const source =
+        data.intelligence ||
+        data.data ||
+        data;
+
+
+    const score =
+        firstDefined(
+            source.context_score,
+            source.score
+        );
+
+
+    if (
+        score !== undefined
+    ) {
+
+        setText(
+            "context-score",
+            score
+        );
+
+
+        setText(
+            "mini-context-score",
+            score
+        );
+    }
 }
 
 
@@ -677,13 +1753,18 @@ async function loadMatches() {
     const table =
         $("matches-table");
 
-    if (!table) return;
+
+    if (!table) {
+        return;
+    }
 
 
     try {
 
         const data =
-            await apiFetch("/matches");
+            await apiFetch(
+                "/matches"
+            );
 
 
         console.log(
@@ -693,29 +1774,52 @@ async function loadMatches() {
 
 
         let matches =
-            Array.isArray(data)
-                ? data
-                : (
-                    data.matches ||
-                    data.data ||
-                    []
-                );
+            normaliseList(
+                data,
+                ["matches"]
+            );
 
 
-        if (!matches.length) {
+        const selectedSeason =
+            $("match-season-filter")?.value;
 
-            table.innerHTML =
-                `<tr>
-                    <td colspan="7">
-                        No matches found.
-                    </td>
-                </tr>`;
 
-            return;
+        if (selectedSeason) {
+
+            matches =
+                matches.filter(match => {
+
+                    const season =
+                        firstDefined(
+                            match.season,
+                            match.year
+                        );
+
+
+                    return String(season) ===
+                        String(selectedSeason);
+                });
         }
 
 
         table.innerHTML = "";
+
+
+        if (!matches.length) {
+
+            table.innerHTML = `
+
+                <tr>
+
+                    <td colspan="7">
+                        No matches found.
+                    </td>
+
+                </tr>
+            `;
+
+            return;
+        }
 
 
         matches.forEach(match => {
@@ -725,62 +1829,106 @@ async function loadMatches() {
 
 
             const id =
-                match.id ??
-                match.match_id ??
-                "";
+                firstDefined(
+                    match.id,
+                    match.match_id,
+                    ""
+                );
+
+
+            const teams =
+                firstDefined(
+                    match.teams,
+                    match.team_names,
+                    (
+                        match.team1 &&
+                        match.team2
+                    )
+                        ? `${match.team1} vs ${match.team2}`
+                        : undefined,
+                    "—"
+                );
 
 
             row.innerHTML = `
-                <td>${escapeHTML(
-                    match.id ??
-                    match.match_id ??
-                    "—"
-                )}</td>
-
-                <td>${escapeHTML(
-                    match.date ??
-                    match.match_date ??
-                    "—"
-                )}</td>
-
-                <td>${escapeHTML(
-                    match.season ??
-                    "—"
-                )}</td>
-
-                <td>${escapeHTML(
-                    match.teams ??
-                    match.team1 + " vs " + match.team2
-                    || "—"
-                )}</td>
-
-                <td>${escapeHTML(
-                    match.venue ??
-                    "—"
-                )}</td>
-
-                <td>${escapeHTML(
-                    match.winner ??
-                    "—"
-                )}</td>
 
                 <td>
+                    ${escapeHTML(
+                        firstDefined(
+                            match.id,
+                            match.match_id,
+                            "—"
+                        )
+                    )}
+                </td>
+
+                <td>
+                    ${escapeHTML(
+                        firstDefined(
+                            match.date,
+                            match.match_date,
+                            "—"
+                        )
+                    )}
+                </td>
+
+                <td>
+                    ${escapeHTML(
+                        firstDefined(
+                            match.season,
+                            "—"
+                        )
+                    )}
+                </td>
+
+                <td>
+                    ${escapeHTML(
+                        teams
+                    )}
+                </td>
+
+                <td>
+                    ${escapeHTML(
+                        firstDefined(
+                            match.venue,
+                            "—"
+                        )
+                    )}
+                </td>
+
+                <td>
+                    ${escapeHTML(
+                        firstDefined(
+                            match.winner,
+                            "—"
+                        )
+                    )}
+                </td>
+
+                <td>
+
                     <button
+                        type="button"
                         class="small-button match-view-btn"
                         data-match-id="${escapeHTML(id)}"
                     >
                         View
                     </button>
+
                 </td>
             `;
 
 
-            table.appendChild(row);
+            table.appendChild(
+                row
+            );
         });
 
 
-        document
-            .querySelectorAll(".match-view-btn")
+        table
+            .querySelectorAll(
+                ".match-view-btn"
+            )
             .forEach(button => {
 
                 button.addEventListener(
@@ -803,12 +1951,16 @@ async function loadMatches() {
         );
 
 
-        table.innerHTML =
-            `<tr>
+        table.innerHTML = `
+
+            <tr>
+
                 <td colspan="7">
                     Failed to load matches.
                 </td>
-            </tr>`;
+
+            </tr>
+        `;
     }
 }
 
@@ -822,51 +1974,92 @@ async function loadSeasons() {
     const select =
         $("match-season-filter");
 
-    if (!select) return;
+
+    if (!select) {
+        return;
+    }
 
 
     try {
 
         const data =
-            await apiFetch("/seasons");
+            await apiFetch(
+                "/seasons"
+            );
 
 
         const seasons =
-            Array.isArray(data)
-                ? data
-                : (
-                    data.seasons ||
-                    data.data ||
-                    []
-                );
+            normaliseList(
+                data,
+                ["seasons"]
+            );
 
 
-        seasons.forEach(season => {
+        const current =
+            select.value;
+
+
+        select.innerHTML =
+            `<option value="">
+                All Seasons
+            </option>`;
+
+
+        seasons.forEach(item => {
+
+            const season =
+                typeof item === "object"
+                    ? firstDefined(
+                        item.season,
+                        item.year
+                    )
+                    : item;
+
+
+            if (
+                season === undefined ||
+                season === null
+            ) {
+                return;
+            }
+
 
             const option =
                 document.createElement("option");
 
+
             option.value =
-                typeof season === "object"
-                    ? season.season
-                    : season;
+                season;
+
 
             option.textContent =
-                typeof season === "object"
-                    ? season.season
-                    : season;
+                season;
 
-            select.appendChild(option);
+
+            select.appendChild(
+                option
+            );
         });
 
 
-        select.addEventListener(
-            "change",
-            () => {
+        if (current) {
+            select.value = current;
+        }
 
-                loadMatches();
-            }
-        );
+
+        if (
+            !select.dataset.bound
+        ) {
+
+            select.addEventListener(
+                "change",
+                loadMatches
+            );
+
+
+            select.dataset.bound =
+                "true";
+        }
 
 
     } catch (error) {
@@ -880,27 +2073,38 @@ async function loadSeasons() {
 
 
 /* =========================================================
-   MATCH DETAIL / MODAL
+   MATCH MODAL
 ========================================================= */
 
 async function loadMatch(matchId) {
 
-    if (!matchId) return;
+    if (!matchId) {
+        return;
+    }
 
 
     const modal =
         $("match-modal");
 
+
     const details =
         $("match-details");
 
 
-    if (!modal || !details) return;
+    if (
+        !modal ||
+        !details
+    ) {
+        return;
+    }
 
 
-    modal.classList.remove("hidden");
+    modal.classList.remove(
+        "hidden"
+    );
 
-    details.innerHTML =
+
+    details.textContent =
         "Loading match...";
 
 
@@ -912,10 +2116,18 @@ async function loadMatch(matchId) {
             );
 
 
-        details.innerHTML =
-            `<pre>${escapeHTML(
-                JSON.stringify(data, null, 2)
-            )}</pre>`;
+        details.innerHTML = `
+
+            <pre>
+${escapeHTML(
+    JSON.stringify(
+        data,
+        null,
+        2
+    )
+)}
+            </pre>
+        `;
 
 
     } catch (error) {
@@ -934,7 +2146,9 @@ function setupModal() {
             () => {
 
                 $("match-modal")
-                    ?.classList.add("hidden");
+                    ?.classList.add(
+                        "hidden"
+                    );
             }
         );
 
@@ -945,11 +2159,14 @@ function setupModal() {
             event => {
 
                 if (
-                    event.target.id === "match-modal"
+                    event.target ===
+                    event.currentTarget
                 ) {
 
                     event.currentTarget
-                        .classList.add("hidden");
+                        .classList.add(
+                            "hidden"
+                        );
                 }
             }
         );
@@ -965,13 +2182,18 @@ async function loadTeams() {
     const container =
         $("teams-grid");
 
-    if (!container) return;
+
+    if (!container) {
+        return;
+    }
 
 
     try {
 
         const data =
-            await apiFetch("/teams");
+            await apiFetch(
+                "/teams"
+            );
 
 
         console.log(
@@ -981,53 +2203,88 @@ async function loadTeams() {
 
 
         const teams =
-            Array.isArray(data)
-                ? data
-                : (
-                    data.teams ||
-                    data.data ||
-                    []
-                );
+            normaliseList(
+                data,
+                ["teams"]
+            );
 
 
         container.innerHTML = "";
 
 
+        if (!teams.length) {
+
+            container.innerHTML =
+                `<div class="loading-state">
+                    No teams found.
+                </div>`;
+
+            return;
+        }
+
+
         teams.forEach(team => {
 
-            const name =
-                typeof team === "string"
-                    ? team
-                    : (
-                        team.name ||
-                        team.team_name ||
+            let name;
+
+
+            if (
+                typeof team ===
+                "string"
+            ) {
+
+                name = team;
+
+            } else {
+
+                name =
+                    firstDefined(
+                        team.name,
+                        team.team_name,
                         team.team
                     );
+            }
 
 
-            if (!name) return;
+            if (!name) {
+                return;
+            }
 
 
             const card =
-                document.createElement("button");
+                document.createElement(
+                    "button"
+                );
+
+
+            card.type = "button";
 
             card.className =
                 "feature-card";
 
 
             card.innerHTML = `
-                <div class="feature-icon">◆</div>
+
+                <div class="feature-icon">
+                    ◆
+                </div>
 
                 <div>
-                    <h3>${escapeHTML(name)}</h3>
+
+                    <h3>
+                        ${escapeHTML(name)}
+                    </h3>
 
                     <p>
                         Explore team batting,
                         bowling and performance analytics.
                     </p>
+
                 </div>
 
-                <span class="feature-arrow">→</span>
+                <span class="feature-arrow">
+                    →
+                </span>
             `;
 
 
@@ -1037,7 +2294,9 @@ async function loadTeams() {
             );
 
 
-            container.appendChild(card);
+            container.appendChild(
+                card
+            );
         });
 
 
@@ -1062,29 +2321,33 @@ async function loadTeam(teamName) {
     const detail =
         $("team-detail");
 
+
     const list =
         $("teams-view");
-
-
-    if (!detail || !list) return;
-
-
-    list.classList.add("hidden");
-
-    detail.classList.remove("hidden");
-
-
-    setText(
-        "team-detail-name",
-        teamName
-    );
 
 
     const content =
         $("team-detail-content");
 
 
-    if (!content) return;
+    if (
+        !detail ||
+        !list ||
+        !content
+    ) {
+        return;
+    }
+
+
+    hide("teams-view");
+
+    show("team-detail");
+
+
+    setText(
+        "team-detail-name",
+        teamName
+    );
 
 
     content.innerHTML =
@@ -1101,17 +2364,27 @@ async function loadTeam(teamName) {
             );
 
 
-        content.innerHTML =
-            `<pre>${escapeHTML(
-                JSON.stringify(data, null, 2)
-            )}</pre>`;
+        content.innerHTML = `
+
+            <pre>
+${escapeHTML(
+    JSON.stringify(
+        data,
+        null,
+        2
+    )
+)}
+            </pre>
+        `;
 
 
     } catch (error) {
 
         content.innerHTML =
             `<div class="error-state">
-                ${escapeHTML(error.message)}
+                ${escapeHTML(
+                    error.message
+                )}
             </div>`;
     }
 }
@@ -1124,11 +2397,13 @@ function setupTeamControls() {
             "click",
             () => {
 
-                $("team-detail")
-                    ?.classList.add("hidden");
+                hide(
+                    "team-detail"
+                );
 
-                $("teams-view")
-                    ?.classList.remove("hidden");
+                show(
+                    "teams-view"
+                );
             }
         );
 }
@@ -1143,13 +2418,18 @@ async function loadVenues() {
     const container =
         $("venues-grid");
 
-    if (!container) return;
+
+    if (!container) {
+        return;
+    }
 
 
     try {
 
         const data =
-            await apiFetch("/venues");
+            await apiFetch(
+                "/venues"
+            );
 
 
         console.log(
@@ -1159,53 +2439,88 @@ async function loadVenues() {
 
 
         const venues =
-            Array.isArray(data)
-                ? data
-                : (
-                    data.venues ||
-                    data.data ||
-                    []
-                );
+            normaliseList(
+                data,
+                ["venues"]
+            );
 
 
         container.innerHTML = "";
 
 
+        if (!venues.length) {
+
+            container.innerHTML =
+                `<div class="loading-state">
+                    No venues found.
+                </div>`;
+
+            return;
+        }
+
+
         venues.forEach(venue => {
 
-            const name =
-                typeof venue === "string"
-                    ? venue
-                    : (
-                        venue.name ||
-                        venue.venue_name ||
+            let name;
+
+
+            if (
+                typeof venue ===
+                "string"
+            ) {
+
+                name = venue;
+
+            } else {
+
+                name =
+                    firstDefined(
+                        venue.name,
+                        venue.venue_name,
                         venue.venue
                     );
+            }
 
 
-            if (!name) return;
+            if (!name) {
+                return;
+            }
 
 
             const card =
-                document.createElement("button");
+                document.createElement(
+                    "button"
+                );
+
+
+            card.type = "button";
 
             card.className =
                 "feature-card";
 
 
             card.innerHTML = `
-                <div class="feature-icon">◇</div>
+
+                <div class="feature-icon">
+                    ◇
+                </div>
 
                 <div>
-                    <h3>${escapeHTML(name)}</h3>
+
+                    <h3>
+                        ${escapeHTML(name)}
+                    </h3>
 
                     <p>
                         Explore venue scoring
                         and performance behaviour.
                     </p>
+
                 </div>
 
-                <span class="feature-arrow">→</span>
+                <span class="feature-arrow">
+                    →
+                </span>
             `;
 
 
@@ -1215,7 +2530,9 @@ async function loadVenues() {
             );
 
 
-            container.appendChild(card);
+            container.appendChild(
+                card
+            );
         });
 
 
@@ -1240,29 +2557,33 @@ async function loadVenue(venueName) {
     const detail =
         $("venue-detail");
 
+
     const list =
         $("venues-view");
-
-
-    if (!detail || !list) return;
-
-
-    list.classList.add("hidden");
-
-    detail.classList.remove("hidden");
-
-
-    setText(
-        "venue-detail-name",
-        venueName
-    );
 
 
     const content =
         $("venue-detail-content");
 
 
-    if (!content) return;
+    if (
+        !detail ||
+        !list ||
+        !content
+    ) {
+        return;
+    }
+
+
+    hide("venues-view");
+
+    show("venue-detail");
+
+
+    setText(
+        "venue-detail-name",
+        venueName
+    );
 
 
     content.innerHTML =
@@ -1279,17 +2600,27 @@ async function loadVenue(venueName) {
             );
 
 
-        content.innerHTML =
-            `<pre>${escapeHTML(
-                JSON.stringify(data, null, 2)
-            )}</pre>`;
+        content.innerHTML = `
+
+            <pre>
+${escapeHTML(
+    JSON.stringify(
+        data,
+        null,
+        2
+    )
+)}
+            </pre>
+        `;
 
 
     } catch (error) {
 
         content.innerHTML =
             `<div class="error-state">
-                ${escapeHTML(error.message)}
+                ${escapeHTML(
+                    error.message
+                )}
             </div>`;
     }
 }
@@ -1302,11 +2633,13 @@ function setupVenueControls() {
             "click",
             () => {
 
-                $("venue-detail")
-                    ?.classList.add("hidden");
+                hide(
+                    "venue-detail"
+                );
 
-                $("venues-view")
-                    ?.classList.remove("hidden");
+                show(
+                    "venues-view"
+                );
             }
         );
 }
@@ -1331,11 +2664,19 @@ async function loadMatchup() {
     const batter =
         $("matchup-batter")?.value;
 
+
     const bowler =
         $("matchup-bowler")?.value;
 
 
-    if (!batter || !bowler) {
+    const result =
+        $("matchup-result");
+
+
+    if (
+        !batter ||
+        !bowler
+    ) {
 
         alert(
             "Please select both a batter and a bowler."
@@ -1345,11 +2686,9 @@ async function loadMatchup() {
     }
 
 
-    const result =
-        $("matchup-result");
-
-
-    if (!result) return;
+    if (!result) {
+        return;
+    }
 
 
     result.innerHTML =
@@ -1367,22 +2706,38 @@ async function loadMatchup() {
 
 
         console.log(
-            "MATCHUP:",
+            "SportsIQ MATCHUP:",
             data
         );
 
 
-        result.innerHTML =
-            `<pre>${escapeHTML(
-                JSON.stringify(data, null, 2)
-            )}</pre>`;
+        result.innerHTML = `
+
+            <pre>
+${escapeHTML(
+    JSON.stringify(
+        data,
+        null,
+        2
+    )
+)}
+            </pre>
+        `;
 
 
     } catch (error) {
 
+        console.error(
+            "Matchup failed:",
+            error
+        );
+
+
         result.innerHTML =
             `<div class="error-state">
-                ${escapeHTML(error.message)}
+                ${escapeHTML(
+                    error.message
+                )}
             </div>`;
     }
 }
@@ -1399,77 +2754,85 @@ function setupAI() {
     );
 
 
-    const inputs = [
-        "ai-question",
-        "ai-question-global"
+    const bindings = [
+
+        {
+            input: "ai-question",
+            button: "ai-send"
+        },
+
+        {
+            input: "ai-question-global",
+            button: "ai-send-global"
+        }
     ];
 
 
-    const buttons = [
-        "ai-send",
-        "ai-send-global"
-    ];
+    bindings.forEach(
+        ({ input, button }) => {
+
+            const inputElement =
+                $(input);
 
 
-    inputs.forEach(id => {
-
-        const input = $(id);
-
-        if (!input) return;
+            const buttonElement =
+                $(button);
 
 
-        input.addEventListener(
-            "keydown",
-            event => {
+            if (inputElement) {
 
-                if (
-                    event.key === "Enter" &&
-                    !event.shiftKey
-                ) {
+                inputElement.addEventListener(
+                    "keydown",
+                    event => {
 
-                    event.preventDefault();
+                        if (
+                            event.key ===
+                                "Enter" &&
+                            !event.shiftKey
+                        ) {
 
-                    sendAIQuestion(input);
-                }
+                            event.preventDefault();
+
+                            sendAIQuestion(
+                                inputElement
+                            );
+                        }
+                    }
+                );
             }
-        );
-    });
 
 
-    buttons.forEach(id => {
+            if (buttonElement) {
 
-        const button = $(id);
+                buttonElement.addEventListener(
+                    "click",
+                    () => {
 
-        if (!button) return;
-
-
-        button.addEventListener(
-            "click",
-            () => {
-
-                const input =
-                    id === "ai-send"
-                        ? $("ai-question")
-                        : $("ai-question-global");
-
-
-                sendAIQuestion(input);
+                        sendAIQuestion(
+                            inputElement
+                        );
+                    }
+                );
             }
-        );
-    });
+        }
+    );
 }
 
 
 async function sendAIQuestion(input) {
 
-    if (!input) return;
+    if (!input) {
+        return;
+    }
 
 
     const question =
         input.value.trim();
 
 
-    if (!question) return;
+    if (!question) {
+        return;
+    }
 
 
     const container =
@@ -1489,6 +2852,28 @@ async function sendAIQuestion(input) {
     input.value = "";
 
 
+    const button =
+        input.id === "ai-question"
+            ? $("ai-send")
+            : $("ai-send-global");
+
+
+    const originalText =
+        button
+            ? button.textContent
+            : "Ask";
+
+
+    if (button) {
+
+        button.disabled =
+            true;
+
+        button.textContent =
+            "Thinking...";
+    }
+
+
     try {
 
         console.log(
@@ -1502,9 +2887,12 @@ async function sendAIQuestion(input) {
                 "/ai/chat",
                 {
                     method: "POST",
-                    body: JSON.stringify({
-                        question: question
-                    })
+
+                    body:
+                        JSON.stringify({
+                            question:
+                                question
+                        })
                 }
             );
 
@@ -1516,10 +2904,12 @@ async function sendAIQuestion(input) {
 
 
         const answer =
-            data.answer ||
-            data.response ||
-            data.message ||
-            "No answer returned.";
+            firstDefined(
+                data.answer,
+                data.response,
+                data.message,
+                "No answer returned."
+            );
 
 
         appendAIMessage(
@@ -1544,6 +2934,18 @@ async function sendAIQuestion(input) {
             `Error: ${error.message}`,
             "ai"
         );
+
+
+    } finally {
+
+        if (button) {
+
+            button.disabled =
+                false;
+
+            button.textContent =
+                originalText;
+        }
     }
 }
 
@@ -1555,11 +2957,15 @@ function appendAIMessage(
     type
 ) {
 
-    if (!container) return;
+    if (!container) {
+        return;
+    }
 
 
     const div =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
 
     div.className =
@@ -1567,24 +2973,38 @@ function appendAIMessage(
 
 
     const strong =
-        document.createElement("strong");
+        document.createElement(
+            "strong"
+        );
+
 
     strong.textContent =
         sender;
 
 
     const p =
-        document.createElement("p");
+        document.createElement(
+            "p"
+        );
+
 
     p.textContent =
         message;
 
 
-    div.appendChild(strong);
-    div.appendChild(p);
+    div.appendChild(
+        strong
+    );
 
 
-    container.appendChild(div);
+    div.appendChild(
+        p
+    );
+
+
+    container.appendChild(
+        div
+    );
 
 
     container.scrollTop =
@@ -1598,40 +3018,48 @@ function appendAIMessage(
 
 function setupRefresh() {
 
-    $("refresh-btn")
-        ?.addEventListener(
-            "click",
-            async () => {
-
-                const button =
-                    $("refresh-btn");
+    const button =
+        $("refresh-btn");
 
 
-                if (button) {
+    if (!button) {
+        return;
+    }
 
-                    button.disabled = true;
-                }
+
+    button.addEventListener(
+        "click",
+        async () => {
+
+            button.disabled =
+                true;
 
 
-                try {
+            try {
 
-                    await Promise.allSettled([
-                        loadHealth(),
-                        loadOverview(),
-                        loadPlayers(),
-                        loadMatches(),
-                        loadTeams(),
-                        loadVenues()
-                    ]);
+                await Promise.allSettled([
 
-                } finally {
+                    loadHealth(),
 
-                    if (button) {
-                        button.disabled = false;
-                    }
-                }
+                    loadOverview(),
+
+                    loadPlayers(),
+
+                    loadMatches(),
+
+                    loadTeams(),
+
+                    loadVenues()
+
+                ]);
+
+            } finally {
+
+                button.disabled =
+                    false;
             }
-        );
+        }
+    );
 }
 
 
@@ -1647,9 +3075,11 @@ document.addEventListener(
             "================================"
         );
 
+
         console.log(
             "SportsIQ frontend starting..."
         );
+
 
         console.log(
             "================================"
@@ -1675,13 +3105,10 @@ document.addEventListener(
             setupMatchup();
 
 
-            showSection("dashboard");
+            showSection(
+                "dashboard"
+            );
 
-
-            /*
-             * Do NOT let one failed API request
-             * stop the others.
-             */
 
             await Promise.allSettled([
 
@@ -1701,7 +3128,7 @@ document.addEventListener(
 
 
             console.log(
-                "SportsIQ frontend initialized."
+                "SportsIQ frontend initialized successfully."
             );
 
 
