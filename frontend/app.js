@@ -1,4 +1,4 @@
-const API_BASE = "/api";
+const API_BASE = "https://sportsiq-backend-i3sr.onrender.com/api";
 
 // ============================================================
 // HELPERS
