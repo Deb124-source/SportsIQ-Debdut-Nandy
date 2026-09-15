@@ -1,12 +1,13 @@
 /* ============================================================
-   SportsIQ — Frontend Application
+   SportsIQ — Cricket Intelligence Frontend
    ============================================================ */
 
-const API_BASE = "https://sportsiq-backend-i3sr.onrender.com/api";
+const API_BASE =
+    "https://sportsiq-backend-i3sr.onrender.com/api";
 
 
 /* ============================================================
-   HELPERS
+   BASIC HELPERS
    ============================================================ */
 
 const $ = (id) => document.getElementById(id);
@@ -25,7 +26,11 @@ function safe(value, fallback = "—") {
 }
 
 function number(value, digits = 2) {
-    if (value === null || value === undefined || value === "") {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
         return "—";
     }
 
@@ -39,7 +44,11 @@ function number(value, digits = 2) {
 }
 
 function integer(value) {
-    if (value === null || value === undefined || value === "") {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
         return "—";
     }
 
@@ -53,7 +62,11 @@ function integer(value) {
 }
 
 function percent(value) {
-    if (value === null || value === undefined || value === "") {
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
         return "—";
     }
 
@@ -66,6 +79,10 @@ function percent(value) {
     return `${n.toFixed(2)}%`;
 }
 
+function encode(value) {
+    return encodeURIComponent(String(value ?? ""));
+}
+
 function escapeHTML(value) {
     return String(value ?? "")
         .replace(/&/g, "&amp;")
@@ -75,59 +92,135 @@ function escapeHTML(value) {
         .replace(/'/g, "&#039;");
 }
 
-function encode(value) {
-    return encodeURIComponent(String(value ?? ""));
+function setText(ids, value) {
+    ids.forEach(id => {
+        const element = $(id);
+
+        if (element) {
+            element.textContent = safe(value);
+        }
+    });
+}
+
+function setHTML(ids, html) {
+    ids.forEach(id => {
+        const element = $(id);
+
+        if (element) {
+            element.innerHTML = html;
+        }
+    });
+}
+
+function showError(ids, message) {
+    ids.forEach(id => {
+        const element = $(id);
+
+        if (element) {
+            element.textContent =
+                message || "Unable to load data.";
+        }
+    });
 }
 
 
 /* ============================================================
-   API
+   API FETCH
    ============================================================ */
 
 async function apiFetch(endpoint, options = {}) {
 
-    const controller = new AbortController();
+    const url =
+        `${API_BASE}${endpoint}`;
 
-    const timeout = setTimeout(() => {
-        controller.abort();
-    }, options.timeout || 60000);
+    console.log(
+        "SportsIQ API REQUEST:",
+        options.method || "GET",
+        url
+    );
+
+    const controller =
+        new AbortController();
+
+    const timeout =
+        setTimeout(() => {
+            controller.abort();
+        }, options.timeout || 90000);
 
     try {
 
-        const response = await fetch(API_BASE + endpoint, {
-            ...options,
-            signal: controller.signal,
-            headers: {
-                "Content-Type": "application/json",
-                ...(options.headers || {})
-            }
-        });
+        const response =
+            await fetch(url, {
+                method:
+                    options.method || "GET",
 
-        let data = null;
+                body:
+                    options.body,
+
+                signal:
+                    controller.signal,
+
+                headers: {
+                    "Content-Type":
+                        "application/json",
+
+                    ...(options.headers || {})
+                }
+            });
+
+        console.log(
+            "SportsIQ API RESPONSE:",
+            response.status,
+            url
+        );
+
+        const text =
+            await response.text();
+
+        let data = {};
 
         try {
-            data = await response.json();
+            data =
+                text
+                    ? JSON.parse(text)
+                    : {};
         } catch {
-            data = null;
+            data = {
+                raw: text
+            };
         }
 
         if (!response.ok) {
 
-            let message =
+            console.error(
+                "SportsIQ API ERROR:",
+                response.status,
+                data
+            );
+
+            throw new Error(
                 data?.detail ||
                 data?.message ||
                 data?.error ||
-                `API Error: ${response.status}`;
-
-            throw new Error(message);
+                `Server returned ${response.status}`
+            );
         }
 
         return data;
 
     } catch (error) {
 
-        if (error.name === "AbortError") {
-            throw new Error("Request timed out. Render may be waking up.");
+        console.error(
+            "SportsIQ FETCH FAILED:",
+            error
+        );
+
+        if (
+            error.name === "AbortError"
+        ) {
+            throw new Error(
+                "Request timed out. The Render server may be waking up."
+            );
         }
 
         throw error;
@@ -144,29 +237,49 @@ async function apiFetch(endpoint, options = {}) {
    INITIALIZATION
    ============================================================ */
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener(
+    "DOMContentLoaded",
+    async () => {
 
-    setupNavigation();
-    setupPlayerControls();
-    setupAI();
-    setupModal();
-    setupRefresh();
-    setupTeamControls();
-    setupVenueControls();
-    setupMatchup();
+        console.log(
+            "SportsIQ frontend loaded."
+        );
 
-    showSection("dashboard-section");
+        console.log(
+            "SportsIQ API:",
+            API_BASE
+        );
 
-    await Promise.allSettled([
-        loadHealth(),
-        loadOverview(),
-        loadPlayers(),
-        loadMatches(),
-        loadTeams(),
-        loadVenues()
-    ]);
+        setupNavigation();
+        setupPlayerControls();
+        setupAI();
+        setupModal();
+        setupRefresh();
+        setupTeamControls();
+        setupVenueControls();
+        setupMatchup();
 
-});
+        showSection(
+            "dashboard-section"
+        );
+
+        /*
+         * Load independent dashboard data.
+         * Promise.allSettled prevents one failed endpoint
+         * from stopping the entire frontend.
+         */
+
+        await Promise.allSettled([
+            loadHealth(),
+            loadOverview(),
+            loadPlayers(),
+            loadMatches(),
+            loadTeams(),
+            loadVenues()
+        ]);
+
+    }
+);
 
 
 /* ============================================================
@@ -175,27 +288,44 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function setupNavigation() {
 
-    const links = document.querySelectorAll(
-        "[data-section], .nav-link, .sidebar-link"
-    );
+    const links =
+        document.querySelectorAll(
+            "[data-section], .nav-link, .sidebar-link"
+        );
 
     links.forEach(link => {
 
-        link.addEventListener("click", event => {
+        link.addEventListener(
+            "click",
+            event => {
 
-            const target =
-                link.dataset.section ||
-                link.getAttribute("data-target") ||
-                link.getAttribute("href");
+                const target =
+                    link.dataset.section ||
+                    link.getAttribute(
+                        "data-target"
+                    ) ||
+                    link.getAttribute(
+                        "href"
+                    );
 
-            if (!target) return;
+                if (!target) {
+                    return;
+                }
 
-            if (target.startsWith("#")) {
-                event.preventDefault();
-                showSection(target.substring(1));
+                if (
+                    target.startsWith("#")
+                ) {
+
+                    event.preventDefault();
+
+                    showSection(
+                        target.substring(1)
+                    );
+
+                }
+
             }
-
-        });
+        );
 
     });
 
@@ -210,8 +340,17 @@ function showSection(sectionId) {
 
     sections.forEach(section => {
 
-        section.style.display =
-            section.id === sectionId ? "" : "none";
+        if (
+            section.id === sectionId
+        ) {
+
+            section.style.display = "";
+
+        } else {
+
+            section.style.display = "none";
+
+        }
 
     });
 
@@ -224,13 +363,17 @@ function showSection(sectionId) {
 
         const target =
             link.dataset.section ||
-            link.getAttribute("data-target") ||
-            link.getAttribute("href");
+            link.getAttribute(
+                "data-target"
+            ) ||
+            link.getAttribute(
+                "href"
+            );
 
         link.classList.toggle(
             "active",
-            target === `#${sectionId}` ||
-            target === sectionId
+            target === sectionId ||
+            target === `#${sectionId}`
         );
 
     });
@@ -247,46 +390,46 @@ async function loadHealth() {
     try {
 
         const data =
-            await apiFetch("/health");
+            await apiFetch(
+                "/health"
+            );
+
+        console.log(
+            "Health:",
+            data
+        );
 
         const status =
             data?.status ||
             data?.message ||
             "Online";
 
-        const elements = [
-            $("system-status"),
-            $("engine-status"),
-            $("health-status"),
-            $("status-text")
-        ];
-
-        elements.forEach(el => {
-
-            if (el) {
-                el.textContent = status;
-            }
-
-        });
+        setText(
+            [
+                "system-status",
+                "engine-status",
+                "health-status",
+                "status-text"
+            ],
+            status
+        );
 
     } catch (error) {
 
-        const elements = [
-            $("system-status"),
-            $("engine-status"),
-            $("health-status"),
-            $("status-text")
-        ];
+        console.error(
+            "Health error:",
+            error
+        );
 
-        elements.forEach(el => {
-
-            if (el) {
-                el.textContent = "Offline";
-            }
-
-        });
-
-        console.error("Health error:", error);
+        setText(
+            [
+                "system-status",
+                "engine-status",
+                "health-status",
+                "status-text"
+            ],
+            "Offline"
+        );
 
     }
 
@@ -302,9 +445,14 @@ async function loadOverview() {
     try {
 
         const data =
-            await apiFetch("/overview");
+            await apiFetch(
+                "/overview"
+            );
 
-        console.log("Overview:", data);
+        console.log(
+            "Overview:",
+            data
+        );
 
         const overview =
             data?.overview ||
@@ -312,7 +460,11 @@ async function loadOverview() {
             data;
 
         setText(
-            ["matches-count", "total-matches", "matches"],
+            [
+                "matches-count",
+                "total-matches",
+                "matches"
+            ],
             integer(
                 overview?.matches ??
                 overview?.total_matches
@@ -320,7 +472,11 @@ async function loadOverview() {
         );
 
         setText(
-            ["deliveries-count", "total-deliveries", "deliveries"],
+            [
+                "deliveries-count",
+                "total-deliveries",
+                "deliveries"
+            ],
             integer(
                 overview?.deliveries ??
                 overview?.total_deliveries
@@ -328,7 +484,11 @@ async function loadOverview() {
         );
 
         setText(
-            ["players-count", "total-players", "players"],
+            [
+                "players-count",
+                "total-players",
+                "players"
+            ],
             integer(
                 overview?.players ??
                 overview?.total_players
@@ -336,7 +496,11 @@ async function loadOverview() {
         );
 
         setText(
-            ["teams-count", "total-teams", "teams"],
+            [
+                "teams-count",
+                "total-teams",
+                "teams"
+            ],
             integer(
                 overview?.teams ??
                 overview?.total_teams
@@ -344,7 +508,11 @@ async function loadOverview() {
         );
 
         setText(
-            ["venues-count", "total-venues", "venues"],
+            [
+                "venues-count",
+                "total-venues",
+                "venues"
+            ],
             integer(
                 overview?.venues ??
                 overview?.total_venues
@@ -352,7 +520,11 @@ async function loadOverview() {
         );
 
         setText(
-            ["seasons-count", "total-seasons", "seasons"],
+            [
+                "seasons-count",
+                "total-seasons",
+                "seasons"
+            ],
             integer(
                 overview?.seasons ??
                 overview?.total_seasons
@@ -361,10 +533,16 @@ async function loadOverview() {
 
     } catch (error) {
 
-        console.error("Overview error:", error);
+        console.error(
+            "Overview error:",
+            error
+        );
 
         showError(
-            ["dashboard-error", "overview-error"],
+            [
+                "dashboard-error",
+                "overview-error"
+            ],
             error.message
         );
 
@@ -374,54 +552,7 @@ async function loadOverview() {
 
 
 /* ============================================================
-   GENERIC TEXT HELPERS
-   ============================================================ */
-
-function setText(ids, value) {
-
-    ids.forEach(id => {
-
-        const el = $(id);
-
-        if (el) {
-            el.textContent = safe(value);
-        }
-
-    });
-
-}
-
-function setHTML(ids, html) {
-
-    ids.forEach(id => {
-
-        const el = $(id);
-
-        if (el) {
-            el.innerHTML = html;
-        }
-
-    });
-
-}
-
-function showError(ids, message) {
-
-    ids.forEach(id => {
-
-        const el = $(id);
-
-        if (el) {
-            el.textContent = message || "Unable to load data.";
-        }
-
-    });
-
-}
-
-
-/* ============================================================
-   PLAYERS
+   PLAYER CONTROLS
    ============================================================ */
 
 function setupPlayerControls() {
@@ -429,23 +560,27 @@ function setupPlayerControls() {
     const select =
         $("player-select");
 
-    if (select) {
-
-        select.addEventListener(
-            "change",
-            async event => {
-
-                const player =
-                    event.target.value;
-
-                if (!player) return;
-
-                await loadPlayer(player);
-
-            }
-        );
-
+    if (!select) {
+        return;
     }
+
+    select.addEventListener(
+        "change",
+        async event => {
+
+            const player =
+                event.target.value;
+
+            if (!player) {
+                return;
+            }
+
+            await loadPlayer(
+                player
+            );
+
+        }
+    );
 
 }
 
@@ -454,9 +589,14 @@ async function loadPlayers() {
     try {
 
         const data =
-            await apiFetch("/players");
+            await apiFetch(
+                "/players"
+            );
 
-        console.log("Players:", data);
+        console.log(
+            "Players:",
+            data
+        );
 
         const players =
             Array.isArray(data)
@@ -465,11 +605,16 @@ async function loadPlayers() {
                   data?.data ||
                   [];
 
-        populatePlayerSelect(players);
+        populatePlayerSelect(
+            players
+        );
 
     } catch (error) {
 
-        console.error("Players error:", error);
+        console.error(
+            "Players error:",
+            error
+        );
 
     }
 
@@ -480,7 +625,9 @@ function populatePlayerSelect(players) {
     const select =
         $("player-select");
 
-    if (!select) return;
+    if (!select) {
+        return;
+    }
 
     const current =
         select.value;
@@ -497,15 +644,24 @@ function populatePlayerSelect(players) {
                   player?.player ||
                   player?.batter;
 
-        if (!name) return;
+        if (!name) {
+            return;
+        }
 
         const option =
-            document.createElement("option");
+            document.createElement(
+                "option"
+            );
 
-        option.value = name;
-        option.textContent = name;
+        option.value =
+            name;
 
-        select.appendChild(option);
+        option.textContent =
+            name;
+
+        select.appendChild(
+            option
+        );
 
     });
 
@@ -524,15 +680,25 @@ async function loadPlayer(playerName) {
                 `/player/${encode(playerName)}`
             );
 
-        console.log("Player:", data);
+        console.log(
+            "Player:",
+            data
+        );
 
-        renderPlayer(data);
+        renderPlayer(
+            data
+        );
 
-        await loadPlayerIntelligence(playerName);
+        await loadPlayerIntelligence(
+            playerName
+        );
 
     } catch (error) {
 
-        console.error("Player error:", error);
+        console.error(
+            "Player error:",
+            error
+        );
 
         showError(
             ["player-error"],
@@ -543,7 +709,9 @@ async function loadPlayer(playerName) {
 
 }
 
-async function loadPlayerIntelligence(playerName) {
+async function loadPlayerIntelligence(
+    playerName
+) {
 
     try {
 
@@ -557,7 +725,9 @@ async function loadPlayerIntelligence(playerName) {
             data
         );
 
-        renderPlayerIntelligence(data);
+        renderPlayerIntelligence(
+            data
+        );
 
     } catch (error) {
 
@@ -578,14 +748,20 @@ function renderPlayer(data) {
         data;
 
     setText(
-        ["player-name", "selected-player-name"],
+        [
+            "player-name",
+            "selected-player-name"
+        ],
         profile?.name ||
         profile?.player ||
         "Player"
     );
 
     setText(
-        ["player-runs", "runs-value"],
+        [
+            "player-runs",
+            "runs-value"
+        ],
         integer(
             profile?.runs ??
             profile?.total_runs
@@ -593,7 +769,10 @@ function renderPlayer(data) {
     );
 
     setText(
-        ["player-average", "average-value"],
+        [
+            "player-average",
+            "average-value"
+        ],
         number(
             profile?.average ??
             profile?.batting_average
@@ -601,14 +780,20 @@ function renderPlayer(data) {
     );
 
     setText(
-        ["player-strike-rate", "strike-rate-value"],
+        [
+            "player-strike-rate",
+            "strike-rate-value"
+        ],
         number(
             profile?.strike_rate
         )
     );
 
     setText(
-        ["player-wickets", "wickets-value"],
+        [
+            "player-wickets",
+            "wickets-value"
+        ],
         integer(
             profile?.wickets ??
             profile?.total_wickets
@@ -616,14 +801,20 @@ function renderPlayer(data) {
     );
 
     setText(
-        ["player-economy", "economy-value"],
+        [
+            "player-economy",
+            "economy-value"
+        ],
         number(
             profile?.economy
         )
     );
 
     setText(
-        ["player-matches", "matches-value"],
+        [
+            "player-matches",
+            "matches-value"
+        ],
         integer(
             profile?.matches ??
             profile?.total_matches
@@ -632,7 +823,9 @@ function renderPlayer(data) {
 
 }
 
-function renderPlayerIntelligence(data) {
+function renderPlayerIntelligence(
+    data
+) {
 
     const profile =
         data?.profile || {};
@@ -642,37 +835,39 @@ function renderPlayerIntelligence(data) {
 
     const context =
         data?.context_score ??
-        data?.context ||
+        data?.context ??
         {};
 
+    const contextValue =
+        typeof context === "number"
+            ? context
+            : context?.score;
+
     setText(
-        ["context-score", "player-context-score"],
-        number(
-            typeof context === "number"
-                ? context
-                : context?.score
-        )
+        [
+            "context-score",
+            "player-context-score"
+        ],
+        number(contextValue)
     );
 
     setText(
         ["player-role"],
         profile?.role ||
-        dna?.role ||
-        "—"
+        dna?.role
     );
 
     setText(
         ["player-archetype"],
         dna?.archetype ||
-        profile?.archetype ||
-        "—"
+        profile?.archetype
     );
 
 }
 
 
 /* ============================================================
-   TEAMS
+   TEAM CONTROLS
    ============================================================ */
 
 function setupTeamControls() {
@@ -680,23 +875,27 @@ function setupTeamControls() {
     const select =
         $("team-select");
 
-    if (select) {
-
-        select.addEventListener(
-            "change",
-            async event => {
-
-                const team =
-                    event.target.value;
-
-                if (!team) return;
-
-                await loadTeam(team);
-
-            }
-        );
-
+    if (!select) {
+        return;
     }
+
+    select.addEventListener(
+        "change",
+        async event => {
+
+            const team =
+                event.target.value;
+
+            if (!team) {
+                return;
+            }
+
+            await loadTeam(
+                team
+            );
+
+        }
+    );
 
 }
 
@@ -705,9 +904,14 @@ async function loadTeams() {
     try {
 
         const data =
-            await apiFetch("/teams");
+            await apiFetch(
+                "/teams"
+            );
 
-        console.log("Teams:", data);
+        console.log(
+            "Teams:",
+            data
+        );
 
         const teams =
             Array.isArray(data)
@@ -716,11 +920,16 @@ async function loadTeams() {
                   data?.data ||
                   [];
 
-        populateTeamSelect(teams);
+        populateTeamSelect(
+            teams
+        );
 
     } catch (error) {
 
-        console.error("Teams error:", error);
+        console.error(
+            "Teams error:",
+            error
+        );
 
     }
 
@@ -731,7 +940,9 @@ function populateTeamSelect(teams) {
     const select =
         $("team-select");
 
-    if (!select) return;
+    if (!select) {
+        return;
+    }
 
     select.innerHTML =
         `<option value="">Select Team</option>`;
@@ -744,21 +955,32 @@ function populateTeamSelect(teams) {
                 : team?.name ||
                   team?.team;
 
-        if (!name) return;
+        if (!name) {
+            return;
+        }
 
         const option =
-            document.createElement("option");
+            document.createElement(
+                "option"
+            );
 
-        option.value = name;
-        option.textContent = name;
+        option.value =
+            name;
 
-        select.appendChild(option);
+        option.textContent =
+            name;
+
+        select.appendChild(
+            option
+        );
 
     });
 
 }
 
-async function loadTeam(teamName) {
+async function loadTeam(
+    teamName
+) {
 
     try {
 
@@ -767,13 +989,21 @@ async function loadTeam(teamName) {
                 `/team/${encode(teamName)}`
             );
 
-        console.log("Team:", data);
+        console.log(
+            "Team:",
+            data
+        );
 
-        renderTeam(data);
+        renderTeam(
+            data
+        );
 
     } catch (error) {
 
-        console.error("Team error:", error);
+        console.error(
+            "Team error:",
+            error
+        );
 
         showError(
             ["team-error"],
@@ -792,48 +1022,81 @@ function renderTeam(data) {
         data;
 
     setText(
-        ["team-name", "selected-team-name"],
+        [
+            "team-name",
+            "selected-team-name"
+        ],
         team?.name ||
         team?.team ||
         "Team"
     );
 
     setText(
-        ["team-matches", "team-matches-value"],
-        integer(team?.matches)
+        [
+            "team-matches",
+            "team-matches-value"
+        ],
+        integer(
+            team?.matches
+        )
     );
 
     setText(
-        ["team-wins", "team-wins-value"],
-        integer(team?.wins)
+        [
+            "team-wins",
+            "team-wins-value"
+        ],
+        integer(
+            team?.wins
+        )
     );
 
     setText(
-        ["team-losses", "team-losses-value"],
-        integer(team?.losses)
+        [
+            "team-losses",
+            "team-losses-value"
+        ],
+        integer(
+            team?.losses
+        )
     );
 
     setText(
-        ["team-win-rate", "team-win-rate-value"],
-        percent(team?.win_percentage ??
-                team?.win_rate)
+        [
+            "team-win-rate",
+            "team-win-rate-value"
+        ],
+        percent(
+            team?.win_percentage ??
+            team?.win_rate
+        )
     );
 
     setText(
-        ["team-runs", "team-runs-value"],
-        integer(team?.runs)
+        [
+            "team-runs",
+            "team-runs-value"
+        ],
+        integer(
+            team?.runs
+        )
     );
 
     setText(
-        ["team-wickets", "team-wickets-value"],
-        integer(team?.wickets)
+        [
+            "team-wickets",
+            "team-wickets-value"
+        ],
+        integer(
+            team?.wickets
+        )
     );
 
 }
 
 
 /* ============================================================
-   VENUES
+   VENUE CONTROLS
    ============================================================ */
 
 function setupVenueControls() {
@@ -841,23 +1104,27 @@ function setupVenueControls() {
     const select =
         $("venue-select");
 
-    if (select) {
-
-        select.addEventListener(
-            "change",
-            async event => {
-
-                const venue =
-                    event.target.value;
-
-                if (!venue) return;
-
-                await loadVenue(venue);
-
-            }
-        );
-
+    if (!select) {
+        return;
     }
+
+    select.addEventListener(
+        "change",
+        async event => {
+
+            const venue =
+                event.target.value;
+
+            if (!venue) {
+                return;
+            }
+
+            await loadVenue(
+                venue
+            );
+
+        }
+    );
 
 }
 
@@ -866,9 +1133,14 @@ async function loadVenues() {
     try {
 
         const data =
-            await apiFetch("/venues");
+            await apiFetch(
+                "/venues"
+            );
 
-        console.log("Venues:", data);
+        console.log(
+            "Venues:",
+            data
+        );
 
         const venues =
             Array.isArray(data)
@@ -877,22 +1149,31 @@ async function loadVenues() {
                   data?.data ||
                   [];
 
-        populateVenueSelect(venues);
+        populateVenueSelect(
+            venues
+        );
 
     } catch (error) {
 
-        console.error("Venues error:", error);
+        console.error(
+            "Venues error:",
+            error
+        );
 
     }
 
 }
 
-function populateVenueSelect(venues) {
+function populateVenueSelect(
+    venues
+) {
 
     const select =
         $("venue-select");
 
-    if (!select) return;
+    if (!select) {
+        return;
+    }
 
     select.innerHTML =
         `<option value="">Select Venue</option>`;
@@ -905,21 +1186,32 @@ function populateVenueSelect(venues) {
                 : venue?.name ||
                   venue?.venue;
 
-        if (!name) return;
+        if (!name) {
+            return;
+        }
 
         const option =
-            document.createElement("option");
+            document.createElement(
+                "option"
+            );
 
-        option.value = name;
-        option.textContent = name;
+        option.value =
+            name;
 
-        select.appendChild(option);
+        option.textContent =
+            name;
+
+        select.appendChild(
+            option
+        );
 
     });
 
 }
 
-async function loadVenue(venueName) {
+async function loadVenue(
+    venueName
+) {
 
     try {
 
@@ -928,13 +1220,21 @@ async function loadVenue(venueName) {
                 `/venue/${encode(venueName)}`
             );
 
-        console.log("Venue:", data);
+        console.log(
+            "Venue:",
+            data
+        );
 
-        renderVenue(data);
+        renderVenue(
+            data
+        );
 
     } catch (error) {
 
-        console.error("Venue error:", error);
+        console.error(
+            "Venue error:",
+            error
+        );
 
         showError(
             ["venue-error"],
@@ -953,40 +1253,73 @@ function renderVenue(data) {
         data;
 
     setText(
-        ["venue-name", "selected-venue-name"],
+        [
+            "venue-name",
+            "selected-venue-name"
+        ],
         venue?.name ||
         venue?.venue ||
         "Venue"
     );
 
     setText(
-        ["venue-matches", "venue-matches-value"],
-        integer(venue?.matches)
+        [
+            "venue-matches",
+            "venue-matches-value"
+        ],
+        integer(
+            venue?.matches
+        )
     );
 
     setText(
-        ["venue-runs", "venue-runs-value"],
-        integer(venue?.runs)
+        [
+            "venue-runs",
+            "venue-runs-value"
+        ],
+        integer(
+            venue?.runs
+        )
     );
 
     setText(
-        ["venue-average", "venue-average-value"],
-        number(venue?.average_runs)
+        [
+            "venue-average",
+            "venue-average-value"
+        ],
+        number(
+            venue?.average_runs
+        )
     );
 
     setText(
-        ["venue-run-rate", "venue-run-rate-value"],
-        number(venue?.run_rate)
+        [
+            "venue-run-rate",
+            "venue-run-rate-value"
+        ],
+        number(
+            venue?.run_rate
+        )
     );
 
     setText(
-        ["venue-boundaries", "venue-boundaries-value"],
-        integer(venue?.boundaries)
+        [
+            "venue-boundaries",
+            "venue-boundaries-value"
+        ],
+        integer(
+            venue?.boundaries
+        )
     );
 
     setText(
-        ["venue-sixes", "venue-sixes-value"],
-        integer(venue?.sixes)
+        [
+            "venue-sixes",
+            "venue-sixes-value"
+        ],
+        integer(
+            venue?.sixes
+        )
     );
 
 }
@@ -1001,9 +1334,14 @@ async function loadMatches() {
     try {
 
         const data =
-            await apiFetch("/matches");
+            await apiFetch(
+                "/matches"
+            );
 
-        console.log("Matches:", data);
+        console.log(
+            "Matches:",
+            data
+        );
 
         const matches =
             Array.isArray(data)
@@ -1012,25 +1350,35 @@ async function loadMatches() {
                   data?.data ||
                   [];
 
-        renderMatches(matches);
+        renderMatches(
+            matches
+        );
 
     } catch (error) {
 
-        console.error("Matches error:", error);
+        console.error(
+            "Matches error:",
+            error
+        );
 
     }
 
 }
 
-function renderMatches(matches) {
+function renderMatches(
+    matches
+) {
 
-    const containers = [
-        $("matches-list"),
-        $("recent-matches"),
-        $("match-list")
-    ].filter(Boolean);
+    const containers =
+        [
+            $("matches-list"),
+            $("recent-matches"),
+            $("match-list")
+        ].filter(Boolean);
 
-    if (!containers.length) return;
+    if (!containers.length) {
+        return;
+    }
 
     const html =
         matches
@@ -1043,33 +1391,51 @@ function renderMatches(matches) {
                     match?.match_id ??
                     "—";
 
-                const teams =
-                    match?.teams ||
-                    match?.team1 && match?.team2
-                        ? `${match?.team1 || ""} vs ${match?.team2 || ""}`
-                        : match?.name ||
-                          "Match";
+                let teams =
+                    match?.name ||
+                    match?.match ||
+                    "";
+
+                if (
+                    match?.team1 &&
+                    match?.team2
+                ) {
+
+                    teams =
+                        `${match.team1} vs ${match.team2}`;
+
+                }
+
+                if (!teams) {
+                    teams = "Match";
+                }
 
                 return `
                     <div class="match-item">
+
                         <strong>
                             ${escapeHTML(teams)}
                         </strong>
+
                         <span>
                             Match ${escapeHTML(id)}
                         </span>
+
                     </div>
                 `;
 
             })
             .join("");
 
-    containers.forEach(container => {
+    containers.forEach(
+        container => {
 
-        container.innerHTML =
-            html || "<p>No matches available.</p>";
+            container.innerHTML =
+                html ||
+                "<p>No matches available.</p>";
 
-    });
+        }
+    );
 
 }
 
@@ -1085,7 +1451,17 @@ function setupMatchup() {
         $("analyze-matchup") ||
         $("matchup-submit");
 
-    if (!button) return;
+    if (!button) {
+        return;
+    }
+
+    if (
+        button.dataset.bound === "true"
+    ) {
+        return;
+    }
+
+    button.dataset.bound = "true";
 
     button.addEventListener(
         "click",
@@ -1110,7 +1486,10 @@ async function analyzeMatchup() {
             "bowler"
         ]);
 
-    if (!batter || !bowler) {
+    if (
+        !batter ||
+        !bowler
+    ) {
 
         showError(
             ["matchup-error"],
@@ -1118,7 +1497,6 @@ async function analyzeMatchup() {
         );
 
         return;
-
     }
 
     try {
@@ -1133,7 +1511,9 @@ async function analyzeMatchup() {
             data
         );
 
-        renderMatchup(data);
+        renderMatchup(
+            data
+        );
 
     } catch (error) {
 
@@ -1151,7 +1531,9 @@ async function analyzeMatchup() {
 
 }
 
-function renderMatchup(data) {
+function renderMatchup(
+    data
+) {
 
     const matchup =
         data?.matchup ||
@@ -1194,20 +1576,29 @@ function renderMatchup(data) {
    INPUT HELPER
    ============================================================ */
 
-function getInputValue(ids) {
+function getInputValue(
+    ids
+) {
 
-    for (const id of ids) {
+    for (
+        const id of ids
+    ) {
 
-        const el = $(id);
+        const element =
+            $(id);
 
-        if (el && el.value) {
-            return el.value.trim();
+        if (
+            element &&
+            element.value
+        ) {
+
+            return element.value.trim();
+
         }
 
     }
 
     return "";
-
 }
 
 
@@ -1217,88 +1608,125 @@ function getInputValue(ids) {
 
 function setupAI() {
 
+    console.log(
+        "Initializing SportsIQ AI..."
+    );
+
     /*
-       Support BOTH possible AI HTML ID sets.
-
-       Normal:
-       ai-question
-       ai-send
-       ai-messages
-
-       Global:
-       ai-question-global
-       ai-send-global
-       ai-messages-global
-    */
+     * Support both possible HTML ID sets.
+     */
 
     const configurations = [
 
         {
-            input: "ai-question",
-            button: "ai-send",
-            messages: "ai-messages"
+            input:
+                "ai-question",
+
+            button:
+                "ai-send",
+
+            messages:
+                "ai-messages"
         },
 
         {
-            input: "ai-question-global",
-            button: "ai-send-global",
-            messages: "ai-messages-global"
+            input:
+                "ai-question-global",
+
+            button:
+                "ai-send-global",
+
+            messages:
+                "ai-messages-global"
         }
 
     ];
 
-    configurations.forEach(config => {
+    let found =
+        false;
 
-        const input =
-            $(config.input);
+    configurations.forEach(
+        config => {
 
-        const button =
-            $(config.button);
+            const input =
+                $(config.input);
 
-        if (!input || !button) {
-            return;
-        }
+            const button =
+                $(config.button);
 
-        /*
-           Prevent duplicate event binding
-        */
+            if (
+                !input ||
+                !button
+            ) {
+                return;
+            }
 
-        if (
-            button.dataset.aiBound === "true"
-        ) {
-            return;
-        }
+            found =
+                true;
 
-        button.dataset.aiBound = "true";
+            console.log(
+                `AI interface found: #${config.input}`
+            );
 
-        button.addEventListener(
-            "click",
-            () => sendAIQuestion(config)
-        );
+            if (
+                button.dataset.aiBound ===
+                "true"
+            ) {
+                return;
+            }
 
-        input.addEventListener(
-            "keydown",
-            event => {
+            button.dataset.aiBound =
+                "true";
 
-                if (
-                    event.key === "Enter" &&
-                    !event.shiftKey
-                ) {
+            button.addEventListener(
+                "click",
+                async () => {
 
-                    event.preventDefault();
-
-                    sendAIQuestion(config);
+                    await sendAIQuestion(
+                        config
+                    );
 
                 }
+            );
 
-            }
+            input.addEventListener(
+                "keydown",
+                async event => {
+
+                    if (
+                        event.key ===
+                            "Enter" &&
+                        !event.shiftKey
+                    ) {
+
+                        event.preventDefault();
+
+                        await sendAIQuestion(
+                            config
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+    if (!found) {
+
+        console.error(
+            "SportsIQ AI ERROR: No AI input/button found."
         );
 
-    });
+    }
 
 }
 
-async function sendAIQuestion(config) {
+
+async function sendAIQuestion(
+    config
+) {
 
     const input =
         $(config.input);
@@ -1306,14 +1734,37 @@ async function sendAIQuestion(config) {
     const button =
         $(config.button);
 
-    const container =
+    const messages =
         $(config.messages);
 
     if (!input) {
+
         console.error(
-            `AI input #${config.input} not found.`
+            `Missing AI input: #${config.input}`
         );
+
         return;
+
+    }
+
+    if (!button) {
+
+        console.error(
+            `Missing AI button: #${config.button}`
+        );
+
+        return;
+
+    }
+
+    if (!messages) {
+
+        console.error(
+            `Missing AI messages: #${config.messages}`
+        );
+
+        return;
+
     }
 
     const question =
@@ -1323,9 +1774,15 @@ async function sendAIQuestion(config) {
         return;
     }
 
-    /*
-       Show user message
-    */
+    console.log(
+        "SportsIQ AI QUESTION:",
+        question
+    );
+
+
+    /* --------------------------------------------
+       USER MESSAGE
+       -------------------------------------------- */
 
     appendAIMessage(
         config.messages,
@@ -1336,75 +1793,83 @@ async function sendAIQuestion(config) {
 
     input.value = "";
 
-    if (button) {
-        button.disabled = true;
-        button.dataset.originalText =
-            button.textContent;
 
-        button.textContent =
-            "Thinking...";
-    }
+    /* --------------------------------------------
+       BUTTON LOADING
+       -------------------------------------------- */
 
-    /*
-       Loading message
-    */
+    const originalText =
+        button.textContent;
 
-    const loadingId =
-        `ai-loading-${Date.now()}`;
+    button.disabled =
+        true;
 
-    if (container) {
+    button.textContent =
+        "Thinking...";
 
-        const loading =
-            document.createElement("div");
 
-        loading.id =
-            loadingId;
+    /* --------------------------------------------
+       LOADING MESSAGE
+       -------------------------------------------- */
 
-        loading.className =
-            "ai-message ai";
+    const loading =
+        document.createElement(
+            "div"
+        );
 
-        loading.innerHTML = `
-            <strong>SportsIQ AI</strong>
-            <p>Analyzing cricket data...</p>
-        `;
+    loading.className =
+        "ai-message ai";
 
-        container.appendChild(loading);
+    loading.id =
+        `sportsiq-ai-loading-${Date.now()}`;
 
-        container.scrollTop =
-            container.scrollHeight;
-    }
+    loading.innerHTML = `
+        <strong>SportsIQ AI</strong>
+        <p>Analyzing cricket data...</p>
+    `;
+
+    messages.appendChild(
+        loading
+    );
+
+    messages.scrollTop =
+        messages.scrollHeight;
+
+
+    /* --------------------------------------------
+       API REQUEST
+       -------------------------------------------- */
 
     try {
 
         console.log(
-            "Sending AI request:",
-            question
+            "SportsIQ AI → POST /ai/chat"
         );
 
         const data =
             await apiFetch(
                 "/ai/chat",
                 {
-                    method: "POST",
-                    body: JSON.stringify({
-                        question: question
-                    }),
-                    timeout: 90000
+                    method:
+                        "POST",
+
+                    body:
+                        JSON.stringify({
+                            question:
+                                question
+                        }),
+
+                    timeout:
+                        90000
                 }
             );
 
         console.log(
-            "AI response:",
+            "SportsIQ AI RESPONSE:",
             data
         );
 
-        /*
-           Remove loading message
-        */
-
-        document
-            .getElementById(loadingId)
-            ?.remove();
+        loading.remove();
 
         const answer =
             data?.answer ||
@@ -1422,38 +1887,33 @@ async function sendAIQuestion(config) {
     } catch (error) {
 
         console.error(
-            "AI request failed:",
+            "SportsIQ AI ERROR:",
             error
         );
 
-        document
-            .getElementById(loadingId)
-            ?.remove();
+        loading.remove();
 
         appendAIMessage(
             config.messages,
             "SportsIQ AI",
-            `Unable to analyze the request: ${error.message}`,
+            `Unable to process the request.\n\n${error.message}`,
             "ai error"
         );
 
     } finally {
 
-        if (button) {
+        button.disabled =
+            false;
 
-            button.disabled = false;
-
-            button.textContent =
-                button.dataset.originalText ||
-                "Send";
-
-        }
+        button.textContent =
+            originalText;
 
         input.focus();
 
     }
 
 }
+
 
 function appendAIMessage(
     containerId,
@@ -1468,7 +1928,7 @@ function appendAIMessage(
     if (!container) {
 
         console.error(
-            `AI message container #${containerId} not found.`
+            `AI message container not found: #${containerId}`
         );
 
         return;
@@ -1476,37 +1936,47 @@ function appendAIMessage(
     }
 
     const div =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
     div.className =
         `ai-message ${type || ""}`;
 
-    div.innerHTML = `
-        <strong>
-            ${escapeHTML(sender)}
-        </strong>
 
-        <p>
-            ${formatAIText(message)}
-        </p>
-    `;
+    const strong =
+        document.createElement(
+            "strong"
+        );
 
-    container.appendChild(div);
+    strong.textContent =
+        sender;
+
+
+    const p =
+        document.createElement(
+            "p"
+        );
+
+    p.textContent =
+        message;
+
+
+    div.appendChild(
+        strong
+    );
+
+    div.appendChild(
+        p
+    );
+
+    container.appendChild(
+        div
+    );
 
     container.scrollTop =
         container.scrollHeight;
 
-}
-
-function formatAIText(message) {
-
-    /*
-       Keep the answer safe from HTML injection,
-       while allowing basic line breaks.
-    */
-
-    return escapeHTML(message)
-        .replace(/\n/g, "<br>");
 }
 
 
@@ -1521,33 +1991,49 @@ function setupRefresh() {
             "#refresh-btn, .refresh-btn, [data-refresh]"
         );
 
-    buttons.forEach(button => {
+    buttons.forEach(
+        button => {
 
-        button.addEventListener(
-            "click",
-            async () => {
+            if (
+                button.dataset.refreshBound ===
+                "true"
+            ) {
+                return;
+            }
 
-                button.disabled = true;
+            button.dataset.refreshBound =
+                "true";
 
-                try {
+            button.addEventListener(
+                "click",
+                async () => {
 
-                    await loadHealth();
-                    await loadOverview();
-                    await loadPlayers();
-                    await loadMatches();
-                    await loadTeams();
-                    await loadVenues();
+                    button.disabled =
+                        true;
 
-                } finally {
+                    try {
 
-                    button.disabled = false;
+                        await Promise.allSettled([
+                            loadHealth(),
+                            loadOverview(),
+                            loadPlayers(),
+                            loadMatches(),
+                            loadTeams(),
+                            loadVenues()
+                        ]);
+
+                    } finally {
+
+                        button.disabled =
+                            false;
+
+                    }
 
                 }
+            );
 
-            }
-        );
-
-    });
+        }
+    );
 
 }
 
@@ -1563,21 +2049,27 @@ function setupModal() {
             ".modal-close, [data-modal-close]"
         );
 
-    closeButtons.forEach(button => {
+    closeButtons.forEach(
+        button => {
 
-        button.addEventListener(
-            "click",
-            closeModal
-        );
+            button.addEventListener(
+                "click",
+                closeModal
+            );
 
-    });
+        }
+    );
 
     document.addEventListener(
         "keydown",
         event => {
 
-            if (event.key === "Escape") {
+            if (
+                event.key === "Escape"
+            ) {
+
                 closeModal();
+
             }
 
         }
@@ -1588,26 +2080,29 @@ function setupModal() {
 function closeModal() {
 
     document
-        .querySelectorAll(".modal")
-        .forEach(modal => {
+        .querySelectorAll(
+            ".modal"
+        )
+        .forEach(
+            modal => {
 
-            modal.classList.remove("active");
-            modal.style.display = "none";
+                modal.classList.remove(
+                    "active"
+                );
 
-        });
+                modal.style.display =
+                    "none";
+
+            }
+        );
 
 }
 
 
 /* ============================================================
-   DEBUG
+   FINAL DEBUG MESSAGE
    ============================================================ */
 
 console.log(
-    "SportsIQ frontend loaded."
-);
-
-console.log(
-    "API:",
-    API_BASE
+    "SportsIQ app.js initialized."
 );
